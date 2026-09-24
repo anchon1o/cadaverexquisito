@@ -38,12 +38,27 @@ function toast(text) {
   n.textContent = text; n.classList.add('show')
   clearTimeout(toast.timer); toast.timer = setTimeout(() => n.classList.remove('show'), 2600)
 }
-const fail = res => toast(t('e_' + (res?.code || 'invalid')))
+const fail = res => { if (res?.detail) console.error(res.detail); toast(t('e_' + (res?.code || 'invalid')) + (res?.detail ? ` [${res.detail}]` : '')) }
 
 // ── Entrada ───────────────────────────────────────────────
 const recent = () => { try { return JSON.parse(local.get('cx_recent')) || [] } catch { return [] } }
 const remember = g => local.set('cx_recent', JSON.stringify([{ code: g.code, size: g.board_size }, ...recent().filter(r => r.code !== g.code)].slice(0, 8)))
 const forget = code => local.set('cx_recent', JSON.stringify(recent().filter(r => r.code !== code)))
+const pick = { size: 5, tile: 40, colors: 32, open: null }
+// Icona de detalle: unha peza cunha curva feita con bloques grandes (sinxelo) ou pequenos (fino).
+const detailIcon = n => { const k = n === 80 ? 1 : 2, cells = []
+  for (let x = 0; x < 12; x += k) { const y = Math.round(10 - 9 * Math.sin(x / 11 * Math.PI)) ; cells.push(`<rect x="${x + 1}" y="${Math.max(1, Math.min(12 - k, y)) + .5}" width="${k}" height="${k}"/>`) }
+  return `<svg viewBox="0 0 14 14" shape-rendering="crispEdges" aria-hidden="true"><rect x=".5" y=".5" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1"/>${cells.join('')}</svg>` }
+// Columna de escolla: botón co valor actual e, se está aberta, a lista vertical de opcións.
+const pickCol = (key, values, ico, label) => {
+  const labels = { size: t('sizeL'), tile: t('detail'), colors: t('colorsLabel') }
+  return `<div class="pick ${pick.open === key ? 'open' : ''}">
+    <small>${labels[key]}</small>
+    <button class="pickbtn" data-open="${key}" aria-expanded="${pick.open === key}">${ico(pick[key])}<span>${label(pick[key])}</span><i class="caret"></i></button>
+    ${pick.open === key ? `<div class="menu">${values.map(v => `<button class="opt ${pick[key] === v ? 'on' : ''}" data-key="${key}" data-val="${v}" aria-pressed="${pick[key] === v}">${ico(v)}<span>${label(v)}</span></button>`).join('')}</div>` : ''}
+  </div>`
+}
+const paletteIcon = n => { const cols = n === 64 ? C.BASE64 : C.BASE32, rows = n / 8; return `<svg viewBox="0 0 8 ${rows}" shape-rendering="crispEdges" aria-hidden="true">${cols.map((c, i) => `<rect x="${i % 8}" y="${i / 8 | 0}" width="1.02" height="1.02" fill="${c}"/>`).join('')}</svg>` }
 const gridIcon = n => `<svg viewBox="0 0 ${n} ${n}" shape-rendering="crispEdges" aria-hidden="true">${Array.from({ length: n * n }, (_, i) => `<rect x="${i % n + .12}" y="${(i / n | 0) + .12}" width=".76" height=".76"/>`).join('')}</svg>`
 
 function renderLobby(message = '', mode = urlCode() ? 'join' : '') {
@@ -61,19 +76,27 @@ function renderLobby(message = '', mode = urlCode() ? 'join' : '') {
       <button class="btn hint ${mode === 'create' ? 'sel' : ''}" id="mCreate" aria-expanded="${mode === 'create'}">${t('createShort')}</button>
       <button class="btn primary ${mode === 'join' ? 'sel' : ''}" id="mJoin" aria-expanded="${mode === 'join'}">${t('joinShort')}</button>
     </div>
-    ${mode === 'create' ? `<section class="box"><p class="boxhint">${t('pickSize')}</p>
-      <div class="sizes4">${[3, 5, 7, 9].map(n => `<button class="sizebtn" data-n="${n}" aria-label="${n}×${n}, ${t('pieces', { t: n * n })}">${gridIcon(n)}</button>`).join('')}</div></section>` : ''}
+    ${mode === 'create' ? `<section class="box">
+      <div class="picks">
+        ${pickCol('size', [3, 5, 7, 9], n => gridIcon(n), n => `${'SMLX'[[3, 5, 7, 9].indexOf(n)]}${n === 9 ? 'L' : ''} · ${n}×${n}`)}
+        ${pickCol('tile', C.SIZES, n => detailIcon(n), n => t(n === 80 ? 'fine' : 'simple'))}
+        ${pickCol('colors', C.PALETTES, n => paletteIcon(n), n => t('ncolors', { n }))}
+      </div>
+      ${pick.tile === 80 ? `<p class="boxhint warn">${t('fineNote')}</p>` : ''}
+      <button class="btn hint wide" id="create">${t('create')}</button></section>` : ''}
     ${mode === 'join' ? `<section class="box"><div class="row">
       <input id="code" maxlength="6" autocapitalize="characters" autocomplete="off" spellcheck="false" aria-label="${t('codePh')}" placeholder="${t('codePh')}" value="${esc(urlCode())}">
       <button class="btn primary" id="join">${t('join')}</button></div></section>` : ''}
     ${games.length ? `<section class="mine"><h2>${t('myGames')}</h2>${games.map(g => `<button class="gamerow" data-code="${esc(g.code)}">${gridIcon(g.size || 7)}<b>${esc(g.code)}</b></button>`).join('')}</section>` : ''}
+    <p class="stats" id="stats"></p>
     ${api.demo ? `<p class="note">${t('demoNote')}</p>` : ''}
   </main><div id="sheet"></div>`
+  api.stats().then(st => { const el = $('#stats'); if (el && st && st.games) el.innerHTML = `<i></i>${t(st.games === 1 ? 'stats1' : 'statsN', { g: st.games })}${st.drawing ? ' ' + t(st.drawing === 1 ? 'drawing1' : 'drawingN', { d: st.drawing }) : ''}` }).catch(() => {})
   const keepName = () => local.set('cx_name', $('#name').value.trim())
   const name = () => { const v = $('#name').value.trim(); if (!v) { $('#err').textContent = t('needName'); $('#name').focus(); return null } local.set('cx_name', v); return v }
   $('#lang').onclick = () => { keepName(); setLang(getLang() === 'gl' ? 'es' : 'gl'); renderLobby('', mode) }
   $('#help').onclick = showHelp
-  $('#mCreate').onclick = () => { keepName(); renderLobby('', mode === 'create' ? '' : 'create') }
+  $('#mCreate').onclick = () => { keepName(); pick.open = null; renderLobby('', mode === 'create' ? '' : 'create') }
   $('#mJoin').onclick = () => { keepName(); renderLobby('', mode === 'join' ? '' : 'join'); $('#code')?.focus() }
   document.querySelectorAll('.gamerow').forEach(b => b.onclick = () => { if (name()) enter(b.dataset.code) })
   if ($('#code')) {
@@ -81,14 +104,15 @@ function renderLobby(message = '', mode = urlCode() ? 'join' : '') {
     $('#code').onkeydown = e => { if (e.key === 'Enter') $('#join').click() }
     $('#join').onclick = () => { if (name() && $('#code').value) enter($('#code').value) }
   }
-  document.querySelectorAll('.sizebtn').forEach(b => b.onclick = async () => {
+  document.querySelectorAll('[data-open]').forEach(b => b.onclick = () => { keepName(); pick.open = pick.open === b.dataset.open ? null : b.dataset.open; renderLobby('', 'create') })
+  document.querySelectorAll('.opt').forEach(b => b.onclick = () => { keepName(); pick[b.dataset.key] = +b.dataset.val; pick.open = null; renderLobby('', 'create') })
+  if ($('#create')) $('#create').onclick = async () => {
     const n = name(); if (!n) return
-    const size = +b.dataset.n
-    document.querySelectorAll('.sizebtn').forEach(x => x.disabled = true)
-    const res = await api.createGame({ title: '', name: n, size, goal: size * size, avoidOwn: true })
+    $('#create').disabled = true
+    const res = await api.createGame({ title: '', name: n, size: pick.size, goal: pick.size * pick.size, avoidOwn: true, tileSize: pick.tile, colors: pick.colors })
     if (res.ok) return enter(res.gameCode)
     fail(res); renderLobby('', 'create')
-  })
+  }
 }
 function showHelp() {
   sheet({ title: t('options'), html: `<ol class="help">${[1, 2, 3, 4].map(i => `<li>${t('help' + i)}</li>`).join('')}</ol>` })
@@ -100,16 +124,33 @@ async function enter(code) {
   if (!local.get('cx_name')) return renderLobby(t('needName'))
   try { history.replaceState(null, '', `?game=${code}`) } catch {}   // falla en marcos illados; non é grave
   S.game = game; remember(game)
+  C.configure(game.tile_size, game.colors); S.color = C.NCOLORS === 64 ? 56 : 24; S.brush = 2
   await refreshAll()
   api.subscribe(game.id, onTileEvent, onGameEvent)
   renderGame()
   if (S.mine) openEditor()
 }
 
+// Aviso de casilla libre: vibración, pitido curto e título da lapela.
+let audio = null
+document.addEventListener('pointerdown', () => { try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); audio.resume() } catch {} }, { passive: true })
+function ping() {
+  toast(t('freeNow'))
+  try { navigator.vibrate?.([120, 60, 120]) } catch {}
+  try {
+    if (audio) [660, 880].forEach((f, i) => {
+      const o = audio.createOscillator(), g = audio.createGain(), at = audio.currentTime + i * .14
+      o.type = 'square'; o.frequency.value = f; g.gain.setValueAtTime(.06, at); g.gain.exponentialRampToValueAtTime(.001, at + .13)
+      o.connect(g).connect(audio.destination); o.start(at); o.stop(at + .14)
+    })
+  } catch {}
+  if (document.hidden) { document.title = '● ' + t('freeNow'); document.addEventListener('visibilitychange', () => { document.title = 'Cadáver exquisito colectivo' }, { once: true }) }
+}
+
 function leaveGame() {
   if (S.stroke) strokeEnd()
   flushDraft(); api.unsubscribe()
-  Object.assign(S, { game: null, tiles: [], creator: false, mine: null, work: null, myDone: new Map(), editorOpen: false, showAuthors: false, needFull: false })
+  Object.assign(S, { game: null, tiles: [], creator: false, mine: null, work: null, myDone: new Map(), editorOpen: false, showAuthors: false, needFull: false, hadOpen: null })
   try { history.replaceState(null, '', location.pathname) } catch {}
   renderLobby('', '')
 }
@@ -181,11 +222,12 @@ function paintGame(first = false) {
     b.setAttribute('aria-label', `${C.tileName(r, c)}`)
     if (revealed && first) b.style.animationDelay = `${tile.ring_no * 420}ms`
     const art = revealed ? tile.art : S.myDone.get(`${r}_${c}`)
-    if (art || tile.frame) {
+    // O taboleiro nunca amosa os marcos alleos: as pistas só se ven no editor, coa casilla xa reservada.
+    if (art) {
       const cv = document.createElement('canvas'); cv.width = cv.height = C.TILE
-      drawTile(cv.getContext('2d'), C.decode(art || tile.frame), !art)
+      drawTile(cv.getContext('2d'), C.decode(art), false)
       b.appendChild(cv)
-    }
+    } else if (state === 'done') b.insertAdjacentHTML('beforeend', `<span class="initial">${esc((tile.editor_name || '?').slice(0, 1).toUpperCase())}</span>`)
     if (state === 'live') b.insertAdjacentHTML('beforeend', `<span class="who">${isMine ? icon('pen') : esc((tile.editor_name || '?').slice(0, 1).toUpperCase())}</span>`)
     if (revealed && S.showAuthors && tile.art) b.insertAdjacentHTML('beforeend', `<span class="author">${esc(tile.editor_name || '')}</span>`)
     b.onclick = () => tapCell(tile, state)
@@ -193,13 +235,16 @@ function paintGame(first = false) {
   }
 
   const rings = (n - 1) / 2, ring = C.activeRing(S.tiles)
-  const anyOpen = S.tiles.some(x => C.cellState(S.tiles, x, now) === 'open')
+  const anyOpen = S.tiles.some(x => C.cellState(S.tiles, x, now) === 'open' && !(S.game.avoid_own && C.ownRuleApplies(S.tiles, x, ownKeys)))
+  if (!revealed && !S.mine && anyOpen && S.hadOpen === false) ping()
+  S.hadOpen = revealed || S.mine ? null : anyOpen
   if (revealed) {
     const people = new Set(S.tiles.filter(x => x.art).map(x => x.editor_name)).size
     $('#status').innerHTML = `<h1>${t('revealedHead')}</h1><p>${t('revealedSub', { d: done, p: people })}</p>`
-    $('#under').innerHTML = `<div class="actions"><button class="btn primary" id="png">${t('download')}</button>
+    $('#under').innerHTML = `<div class="actions"><button class="btn hint" id="proj">${t('project')}</button><button class="btn primary" id="png">${t('download')}</button>
       <button class="btn" id="auth">${t(S.showAuthors ? 'hideAuthors' : 'authors')}</button></div>`
     $('#png').onclick = downloadPng
+    $('#proj').onclick = projectReveal
     $('#auth').onclick = () => { S.showAuthors = !S.showAuthors; paintGame() }
     return
   }
@@ -264,7 +309,7 @@ function tapCell(tile, state) {
   if (state === 'done') return sheet({ title: t('doneTitle', { t: name, n: tile.editor_name }), body: t(S.myDone.has(`${tile.row_no}_${tile.col_no}`) ? 'doneMine' : 'doneBody') })
   if (state === 'art') return sheet({ title: t('doneTitle', { t: name, n: tile.editor_name }), body: '' })
   if (state === 'void') return
-  sheet({ title: t('blockedTitle'), body: t(state === 'blocked' ? 'blockedBody' : state === 'own' ? 'ownBody' : 'futureBody') })
+  sheet({ title: t('blockedTitle'), body: state === 'blocked' ? t('blockedBody', { n: joinList([...new Set(C.blockers(S.tiles, tile))]) }) : t(state === 'own' ? 'ownBody' : 'futureBody') })
 }
 
 function sheet({ title, body, html, ok, run, danger }) {
@@ -283,6 +328,27 @@ async function share() {
   const url = `${location.origin}${location.pathname}?game=${S.game.code}`
   try { if (navigator.share) return await navigator.share({ title: t('appName'), url }) } catch { return }
   try { await navigator.clipboard.writeText(url); toast(t('copied')) } catch { toast(url) }
+}
+
+// Revelación para proxectar: pantalla completa, as pezas destápanse unha a unha na orde en que se debuxaron.
+function projectReveal() {
+  const n = S.game.board_size, done = S.tiles.filter(x => x.art).sort((a, b) => Date.parse(a.finished_at || 0) - Date.parse(b.finished_at || 0))
+  const el = document.createElement('div'); el.className = 'show'
+  el.innerHTML = `<div class="showboard" style="--n:${n}">${S.tiles.slice().sort((a, b) => a.row_no - b.row_no || a.col_no - b.col_no).map(x => `<div class="showcell" data-id="${x.id}"></div>`).join('')}</div>
+    <p class="showcap" id="cap">${t('tapToSkip')}</p><button class="btn small showclose" id="showClose">${t('showEnd')}</button>`
+  document.body.appendChild(el)
+  try { el.requestFullscreen?.().catch(() => {}) } catch {}
+  let i = 0, timer = null
+  const step = () => {
+    if (i >= done.length) { $('#cap', el).textContent = t('revealedSub', { d: done.length, p: new Set(done.map(x => x.editor_name)).size }); el.classList.add('ended'); return }
+    const tile = done[i++], cellEl = el.querySelector(`[data-id="${tile.id}"]`), cv = document.createElement('canvas')
+    cv.width = cv.height = C.TILE; drawTile(cv.getContext('2d'), C.decode(tile.art), false); cellEl.appendChild(cv)
+    $('#cap', el).textContent = tile.editor_name || ''
+    timer = setTimeout(step, Math.max(350, Math.min(1400, 40000 / done.length)))
+  }
+  const close = () => { clearTimeout(timer); try { document.fullscreenElement && document.exitFullscreen() } catch {} el.remove() }
+  el.onclick = e => { if (e.target.id === 'showClose') return close(); clearTimeout(timer); while (i < done.length) { step(); clearTimeout(timer) } step() }
+  timer = setTimeout(step, 900)
 }
 
 function downloadPng() {
@@ -315,8 +381,9 @@ function openEditor() {
   S.editorOpen = true
   const el = $('#editor'); el.hidden = false
   el.innerHTML = `
-    <div class="edbar"><button class="btn small" id="edBack">${t('back')}</button>
-      ${miniMap()}<strong>${t('tile')}</strong><span id="saveState"></span></div>
+    <div class="edbar"><button class="btn small" id="edBack" aria-label="${t('back')}">‹aria-label="${t('back')}">‹&nbsp;${t('backShort')}</button>nbsp;${t('backShort')}</button>
+      ${miniMap()}<strong>${t('tile')}</strong><span id="saveState"></span>
+      <span class="zoomctl"><button class="btn small" id="zOut" aria-label="${t('zoomOut')}">−</button><button class="btn small" id="zIn" aria-label="${t('zoomIn')}">+</button></span></div>
     <div class="edbody">
       <div class="canvaswrap" id="wrap"><canvas id="cv" aria-label="${t('tile', { t: '' })}"></canvas></div>
       <div class="panel">
@@ -326,8 +393,8 @@ function openEditor() {
           <button class="tool" id="undo" title="${t('undo')}" aria-label="${t('undo')}">${icon('undo')}</button>
           <button class="tool" id="redo" title="${t('redo')}" aria-label="${t('redo')}">${icon('redo')}</button>
         </div>
-        <div class="toolrow" id="sizes" aria-label="${t('brush')}">${[1, 2, 4, 6].map(s => `<button class="tool size" data-size="${s}" aria-label="${t('brush')} ${s}"><i style="--s:${s}"></i></button>`).join('')}</div>
-        <div class="palette" id="palette">${C.COLORS.map((c, i) => `<button class="sw" data-color="${i}" style="background:${c}" aria-label="${c}"></button>`).join('')}</div>
+        <div class="toolrow" id="sizes" aria-label="${t('brush')}">${C.BRUSHES.map(s => `<button class="tool size" data-size="${s}" aria-label="${t('brush')} ${s}"><i style="--s:${s}"></i></button>`).join('')}</div>
+        <div class="palette ${C.NCOLORS === 64 ? 'p64' : ''}" id="palette">${C.COLORS.map((c, i) => `<button class="sw" data-color="${i}" style="background:${c}" aria-label="${c}"></button>`).join('')}</div>
         <p class="tip">${t('edHint')}</p>
         <div class="actions"><button class="btn hint" id="publish">${t('publish')}</button><button class="btn" id="release">${t('release')}</button></div>
       </div>
@@ -348,6 +415,9 @@ function openEditor() {
   })
   const cv = $('#cv')
   cv.onpointerdown = strokeStart; cv.onpointermove = strokeMove; cv.onpointerup = cv.onpointercancel = strokeEnd
+  $('#zIn').onclick = () => setZoom(zoom * 1.5); $('#zOut').onclick = () => setZoom(zoom / 1.5)
+  $('#wrap').onwheel = e => { if (e.ctrlKey) { e.preventDefault(); setZoom(zoom * (e.deltaY < 0 ? 1.2 : 1 / 1.2), e.clientX, e.clientY) } }
+  zoom = 1; pointers.clear(); pinch = null
   syncTools(); fitCanvas()
 }
 // Mapa pequeno: onde está a túa peza dentro do taboleiro.
@@ -359,7 +429,7 @@ function miniMap() {
 function closeEditor() {
   if (S.stroke) strokeEnd()
   flushDraft()
-  S.editorOpen = false
+  S.editorOpen = false; zoom = 1
   const el = $('#editor'); if (el) { el.hidden = true; el.innerHTML = '' }
   paintGame()
 }
@@ -371,13 +441,51 @@ function syncTools() {
   if ($('#saveState')) $('#saveState').textContent = S.saveState ? t(S.saveState) : ''
 }
 
-let cell = 8
+// ── Zoom: botóns, Ctrl+roda e pinza con dous dedos (que tamén despraza) ──
+let cell = 8, zoom = 1, pinch = null
+const pointers = new Map()
+function setZoom(z, cx, cy) {
+  const wrap = $('#wrap'), cv = $('#cv'); if (!wrap || !cv) return
+  z = Math.max(1, Math.min(8, z))
+  const r = wrap.getBoundingClientRect()
+  if (cx == null) { cx = r.left + r.width / 2; cy = r.top + r.height / 2 }
+  const px = wrap.scrollLeft + cx - r.left, py = wrap.scrollTop + cy - r.top      // punto do contido baixo o cursor
+  const k = z / zoom; zoom = z
+  const side = cell * C.VIEW * zoom
+  cv.style.width = cv.style.height = side + 'px'
+  wrap.scrollLeft = px * k - (cx - r.left); wrap.scrollTop = py * k - (cy - r.top)
+  if ($('#zOut')) { $('#zOut').disabled = zoom <= 1; $('#zIn').disabled = zoom >= 8 }
+}
+function pinchStart(e) {
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+  if (pointers.size !== 2) return false
+  if (S.stroke) { S.stroke = null; if (S.hist.length) S.work = S.hist.pop(); drawEditor() }   // o trazo empezado co primeiro dedo desfaise
+  const [a, b] = [...pointers.values()], wrap = $('#wrap')
+  pinch = { dist: Math.hypot(a.x - b.x, a.y - b.y), zoom, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2, sl: wrap.scrollLeft, st: wrap.scrollTop }
+  return true
+}
+function pinchMove(e) {
+  if (!pointers.has(e.pointerId)) return false
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+  if (!pinch || pointers.size !== 2) return !!pinch
+  const [a, b] = [...pointers.values()], wrap = $('#wrap'), r = wrap.getBoundingClientRect()
+  const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2
+  const z = Math.max(1, Math.min(8, pinch.zoom * Math.hypot(a.x - b.x, a.y - b.y) / pinch.dist)), k = z / pinch.zoom
+  zoom = z
+  const side = cell * C.VIEW * zoom; $('#cv').style.width = $('#cv').style.height = side + 'px'
+  wrap.scrollLeft = (pinch.sl + pinch.mx - r.left) * k - (mx - r.left)
+  wrap.scrollTop = (pinch.st + pinch.my - r.top) * k - (my - r.top)
+  if ($('#zOut')) { $('#zOut').disabled = zoom <= 1; $('#zIn').disabled = zoom >= 8 }
+  return true
+}
+function pinchEnd(e) { pointers.delete(e.pointerId); if (pointers.size < 2) pinch = null }
+
 function fitCanvas() {
   const wrap = $('#wrap'), cv = $('#cv'); if (!wrap || !cv) return
   const room = Math.min(wrap.clientWidth, wrap.clientHeight || wrap.clientWidth)
-  cell = Math.max(4, Math.floor(room / C.VIEW))
+  cell = Math.max(2, Math.floor(room / C.VIEW))
   const dpr = Math.min(3, window.devicePixelRatio || 1), side = cell * C.VIEW
-  cv.style.width = cv.style.height = side + 'px'
+  cv.style.width = cv.style.height = side * zoom + 'px'
   cv.width = cv.height = Math.round(side * dpr)
   cv.getContext('2d').setTransform(cv.width / C.VIEW, 0, 0, cv.width / C.VIEW, 0, 0)
   drawEditor()
@@ -409,8 +517,10 @@ const toCell = e => {
   return { x: clamp(vx - C.EDGE), y: clamp(vy - C.EDGE), vx: Math.max(0, Math.min(C.VIEW - 1, vx)), vy: Math.max(0, Math.min(C.VIEW - 1, vy)) }
 }
 function strokeStart(e) {
-  if (!e.isPrimary || !S.work) return
+  if (!S.work) return
   e.preventDefault()
+  e.currentTarget.setPointerCapture(e.pointerId)
+  if (pinchStart(e) || !e.isPrimary) return
   const p = toCell(e)
   if (S.tool === 'pick') {
     const inside = p.vx >= C.EDGE && p.vx < C.VIEW - C.EDGE && p.vy >= C.EDGE && p.vy < C.VIEW - C.EDGE
@@ -424,6 +534,7 @@ function strokeStart(e) {
   S.stroke = p; dab(p.x, p.y); drawEditor()
 }
 function strokeMove(e) {
+  if (pinchMove(e)) return
   if (!S.stroke || !e.isPrimary) return
   for (const ev of (e.getCoalescedEvents?.().length ? e.getCoalescedEvents() : [e])) {
     const p = toCell({ currentTarget: e.currentTarget, clientX: ev.clientX, clientY: ev.clientY })
@@ -431,7 +542,7 @@ function strokeMove(e) {
   }
   drawEditor()
 }
-function strokeEnd() { if (S.stroke) { S.stroke = null; changed() } }
+function strokeEnd(e) { if (e) pinchEnd(e); if (S.stroke) { S.stroke = null; changed() } }
 const dab = (x, y) => C.stamp(S.work, x, y, S.brush, S.tool === 'eraser' ? C.EMPTY : S.color)
 function step(from, to) { if (!from.length) return; to.push(S.work.slice()); S.work = from.pop(); drawEditor(); changed() }
 
@@ -476,6 +587,12 @@ document.addEventListener('keydown', e => {
   const tool = { b: 'pen', e: 'eraser', g: 'fill', i: 'pick' }[k]
   if (tool) { S.tool = tool; syncTools() }
 })
+setInterval(() => {
+  if (!S.editorOpen || !S.mine || !$('#saveState')) return
+  const me = C.tileAt(S.tiles, S.mine.row, S.mine.col), left = me?.lock_expires_at ? Date.parse(me.lock_expires_at) - Date.now() : Infinity
+  if (left < 60000) { $('#saveState').textContent = t('lockSoon'); $('#saveState').classList.add('warn'); try { navigator.vibrate?.(80) } catch {} }
+  else $('#saveState').classList.remove('warn')
+}, 10000)
 // As reservas caducan co reloxo e o tempo real pode fallar: repaso periódico.
 setInterval(() => { if (S.game && S.game.status !== 'revealed' && !document.hidden) refreshAll().then(() => !S.stroke && paintGame()) }, 30000)
 document.addEventListener('visibilitychange', () => { if (!document.hidden && S.game) refreshAll().then(paintGame) })

@@ -1,27 +1,57 @@
 // Lóxica pura do xogo: formato de píxeles, aneis, pistas e ferramentas de debuxo.
 // Non toca o DOM nin a rede, así que a usan por igual a interface e o modo demo.
 
-export const TILE = 40          // lado dunha peza, en píxeles
-export const EDGE = 4           // franxa exterior que ven os veciños
-export const VIEW = TILE + EDGE * 2
-export const LOCK_MINUTES = 20  // reserva sen actividade
-export const MIN_PAINTED = 40
+// Xeometría e paleta da partida actual. Son "let" exportados: configure() cámbiaos e todos os módulos ven o novo valor.
+export let TILE = 40          // lado dunha peza, en píxeles (40 sinxelo, 80 fino)
+export let EDGE = 4           // franxa exterior que ven os veciños (TILE/10)
+export let VIEW = TILE + EDGE * 2
+export let MIN_PAINTED = 40
+export let NCOLORS = 32
+export let COLORS = []
+export let BRUSHES = [1, 2, 4, 6]
+export const LOCK_MINUTES = 5
 export const EMPTY = 255
+export const SIZES = [40, 80]
+export const PALETTES = [32, 64]
 
 // 32 cores: 8 familias en columnas (neutros, azul, verde, amarelo, laranxa, vermello, violeta, terra)
 // e 4 tons en filas, de claro a escuro. O negro é negro puro e vai cos grises, lonxe do azul escuro.
-export const COLORS = [
+export const BASE32 = [
   '#FFFFFF','#A6D7F4','#C5E384','#FFF1B0','#FFC89A','#F7A8A8','#F3B6E0','#F0D2B0',
   '#C9D1DC','#4FA3E8','#5AAE68','#FFD93D','#F49B61','#ED5A5A','#C86DCD','#D6A06E',
   '#6B7482','#0F5EA8','#2E7A4A','#E0A100','#D9621F','#B82A3A','#833D95','#9A6A45',
   '#111111','#1B3F7A','#1F4A35','#8F6500','#8A3B12','#6E1A2B','#4B2363','#4E3526'
 ]
-// Unha peza gárdase como 1600 caracteres: '.' = baleiro, e un carácter por cor.
-export const CHARS = '0123456789abcdefghijklmnopqrstuv'
-const VALID = /^[0-9a-v.]{1600}$/
+const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16))
+const toHex = rgb => '#' + rgb.map(v => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0')).join('').toUpperCase()
+// 64 cores: as mesmas 8 familias con 8 tons, interpolando entre os 4 de base (e un extra máis claro e máis escuro).
+export const BASE64 = (() => {
+  const out = []
+  for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+    const anchors = [0, 1, 2, 3].map(k => hex(BASE32[k * 8 + c]))
+    const pos = r / 7 * 3             // filas 0 e 7 = tons 0 e 3 de base; o resto, intermedios
+    const i = Math.max(0, Math.min(2, Math.floor(pos))), f = pos - i
+    out.push(toHex(anchors[i].map((v, k) => v + (anchors[i + 1][k] - v) * f)))
+  }
+  return out
+})()
+
+export function configure(size = 40, colors = 32) {
+  TILE = SIZES.includes(size) ? size : 40
+  EDGE = TILE / 10
+  VIEW = TILE + EDGE * 2
+  MIN_PAINTED = TILE
+  NCOLORS = PALETTES.includes(colors) ? colors : 32
+  COLORS = NCOLORS === 64 ? BASE64 : BASE32
+  BRUSHES = TILE === 80 ? [1, 2, 3, 4, 6, 8] : [1, 2, 4, 6]
+}
+configure()
+// Unha peza gárdase como TILE*TILE caracteres: '.' = baleiro, e un carácter por cor.
+export const CHARS = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_-'
+const VALID32 = /^[0-9a-v.]+$/, VALID64 = /^[0-9a-zA-Z_.-]+$/
 
 export const blank = () => new Uint8Array(TILE * TILE).fill(EMPTY)
-export const isValid = s => typeof s === 'string' && VALID.test(s)
+export const isValid = s => typeof s === 'string' && s.length === TILE * TILE && (NCOLORS === 64 ? VALID64 : VALID32).test(s)
 export function encode(px) {
   let s = ''
   for (let i = 0; i < px.length; i++) s += px[i] === EMPTY ? '.' : CHARS[px[i]]
@@ -75,11 +105,26 @@ export function activeRing(tiles) {
 }
 const touches = (a, b) => Math.abs(a.row_no - b.row_no) <= 1 && Math.abs(a.col_no - b.col_no) <= 1 && a !== b
 
+// Salto de anel: mentres no primeiro anel incompleto quede algunha casilla que se poida coller,
+// xógase aí. Se todas as que faltan están ocupadas ou bloqueadas, ábrese o anel seguinte (só un),
+// e nel só as casillas que xa tocan por un lado unha peza rematada, para que sempre haxa pista.
+export function ringOpen(tiles, t, now = Date.now()) {
+  const ring = activeRing(tiles)
+  if (t.ring_no === ring) return true
+  if (t.ring_no !== ring + 1) return false
+  const live = tiles.filter(o => isLive(o, now))
+  const freeInRing = tiles.some(o => o.ring_no === ring && o.status !== 'done' && !isLive(o, now) && !live.some(e => touches(e, o)))
+  if (freeInRing) return false
+  return SIDES.some(s => { const n = tileAt(tiles, t.row_no + SIDE_DELTA[s][0], t.col_no + SIDE_DELTA[s][1]); return n && n.status === 'done' })
+}
+// Quen está debuxando arredor dunha casilla bloqueada.
+export const blockers = (tiles, t, now = Date.now()) => tiles.filter(o => isLive(o, now) && touches(o, t)).map(o => o.editor_name || '?')
+
 // Estado dunha casilla para quen mira: done | live | open | blocked | future
 export function cellState(tiles, t, now = Date.now()) {
   if (t.status === 'done') return 'done'
   if (isLive(t, now)) return 'live'
-  if (t.ring_no !== activeRing(tiles)) return 'future'
+  if (!ringOpen(tiles, t, now)) return 'future'
   return tiles.some(o => isLive(o, now) && touches(o, t)) ? 'blocked' : 'open'
 }
 
@@ -90,8 +135,7 @@ export function touchesOwn(t, ownKeys) {
 // A regra "non pegado ao teu" relaxase se non queda ningunha outra casilla no anel.
 export function ownRuleApplies(tiles, t, ownKeys) {
   if (!touchesOwn(t, ownKeys)) return false
-  const ring = activeRing(tiles)
-  return tiles.some(o => o.status !== 'done' && o.ring_no === ring && o !== t && !touchesOwn(o, ownKeys))
+  return tiles.some(o => o.status !== 'done' && o !== t && ringOpen(tiles, o) && !touchesOwn(o, ownKeys))
 }
 
 // Halo de 48×48: ao redor da peza propia, os 4 px que asoman de cada veciña rematada.

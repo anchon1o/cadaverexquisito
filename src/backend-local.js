@@ -62,10 +62,10 @@ export function create() {
 
   return {
     demo: true,
-    async createGame({ title, name, size, goal, avoidOwn }) {
+    async createGame({ title, name, size, goal, avoidOwn, tileSize, colors }) {
       const db = read(), id = uuid(), m = (size - 1) / 2
       let code; do { code = Array.from({ length: 6 }, () => 'ABCDEFGHJKLMNPRSTUVWXYZ'[(Math.random() * 23) | 0]).join('') } while (db.games.some(g => g.code === code))
-      db.games.push({ id, code, title: title || 'Cadáver exquisito', creator_name: name, board_size: size, goal: Math.min(goal || size * size, size * size), avoid_own: !!avoidOwn, status: 'playing', revealed_at: null, creator: session })
+      db.games.push({ id, code, title: title || 'Cadáver exquisito', creator_name: name, board_size: size, goal: Math.min(goal || size * size, size * size), avoid_own: !!avoidOwn, tile_size: tileSize || 40, colors: colors || 32, status: 'playing', revealed_at: null, creator: session })
       for (let r = 0; r < size; r++) for (let c = 0; c < size; c++)
         db.tiles.push({ id: uuid(), game_id: id, row_no: r, col_no: c, ring_no: C.ringOf(size, r, c), status: 'open', editor_name: null, lock_expires_at: null, frame: null, art: null })
       write(db)
@@ -104,6 +104,7 @@ export function create() {
       if (!db.tiles.some(t => t.game_id === g && t.status === 'done')) return fail('invalid')
       doReveal(db, game); write(db); return { ok: true }
     },
+    async stats() { const db = read(); return { games: db.games.filter(g => g.status === 'playing').length, drawing: db.tiles.filter(t => C.isLive(t)).length } },
     unsubscribe() { notify = () => {} },
     subscribe(gameId, onTile, onGame) {
       notify = async () => { onTile(null); const g = read().games.find(g => g.id === gameId); if (g) { const { creator: _c, ...rest } = g; onGame(rest) } }
@@ -129,20 +130,21 @@ function doodle(tiles, row, col) {
   const px = C.blank(), halo = C.buildHalo(tiles, row, col), rnd = n => (Math.random() * n) | 0
   if (Math.random() < .5) px.fill(1 + rnd(7))
   const walk = (x, y, tx, ty, color, size) => {
-    for (let i = 0; i < 60 && (Math.abs(x - tx) > 1 || Math.abs(y - ty) > 1); i++) {
-      const nx = Math.max(0, Math.min(39, x + Math.sign(tx - x) + rnd(3) - 1)), ny = Math.max(0, Math.min(39, y + Math.sign(ty - y) + rnd(3) - 1))
+    for (let i = 0; i < C.TILE * 1.5 && (Math.abs(x - tx) > 1 || Math.abs(y - ty) > 1); i++) {
+      const nx = Math.max(0, Math.min(C.TILE - 1, x + Math.sign(tx - x) + rnd(3) - 1)), ny = Math.max(0, Math.min(C.TILE - 1, y + Math.sign(ty - y) + rnd(3) - 1))
       C.line(x, y, nx, ny, (a, b) => C.stamp(px, a, b, size, color)); x = nx; y = ny
     }
   }
-  const cx = 12 + rnd(16), cy = 12 + rnd(16)
-  for (let i = 0; i < C.TILE; i += 3) for (const [vx, vy, x, y] of [[i + 4, 3, i, 0], [i + 4, 44, i, 39], [3, i + 4, 0, i], [44, i + 4, 39, i]]) {
+  const cx = (C.TILE * .3 + rnd(C.TILE * .4)) | 0, cy = (C.TILE * .3 + rnd(C.TILE * .4)) | 0
+  const E = C.EDGE, T = C.TILE
+  for (let i = 0; i < T; i += 3) for (const [vx, vy, x, y] of [[i + E, E - 1, i, 0], [i + E, T + E, i, T - 1], [E - 1, i + E, 0, i], [T + E, i + E, T - 1, i]]) {
     const v = halo.px[vy * C.VIEW + vx]
     if (v !== C.EMPTY && Math.random() < .8) walk(x, y, cx, cy, v, 2)
   }
   for (let i = 0; i < 3; i++) {
-    const color = rnd(32), a = rnd(40), b = rnd(40)
-    Math.random() < .5 ? walk(a, 0, b, 39, color, 2 + rnd(3)) : walk(0, a, 39, b, color, 2 + rnd(3))
+    const color = rnd(C.NCOLORS), a = rnd(C.TILE), b = rnd(C.TILE)
+    Math.random() < .5 ? walk(a, 0, b, C.TILE - 1, color, 2 + rnd(3)) : walk(0, a, C.TILE - 1, b, color, 2 + rnd(3))
   }
-  C.stamp(px, cx, cy, 6, rnd(32))
+  C.stamp(px, cx, cy, 6, rnd(C.NCOLORS))
   return C.encode(px)
 }

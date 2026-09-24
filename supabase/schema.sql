@@ -19,10 +19,15 @@ create table if not exists public.cx_games (
   board_size integer not null default 7 check (board_size in (3,5,7,9)),
   goal integer not null check (goal > 0),
   avoid_own boolean not null default true,
+  tile_size integer not null default 40 check (tile_size in (40,80)),
+  colors integer not null default 32 check (colors in (32,64)),
   status text not null default 'playing' check (status in ('playing','revealed')),
   revealed_at timestamptz,
   created_at timestamptz not null default now()
 );
+
+alter table public.cx_games add column if not exists tile_size integer not null default 40;
+alter table public.cx_games add column if not exists colors integer not null default 32;
 
 create table if not exists public.cx_tiles (
   id uuid primary key default gen_random_uuid(),
@@ -73,35 +78,32 @@ do $$ begin alter publication supabase_realtime add table public.cx_games;
 exception when duplicate_object or undefined_object then null; end $$;
 
 -- ── Auxiliares internas ──────────────────────────────────────────────
-create or replace function public.cx_make_code()
-returns text
-language plpgsql
-as $$
+create or replace function public.cx_make_code() returns text language plpgsql as $$
 declare
-  -- Solo letras sin I, O ni Q, para evitar confusiones.
+  -- Só letras, sen I, O nin Q: non se confunden entre si nin con cifras.
   chars constant text := 'ABCDEFGHJKLMNPRSTUVWXYZ';
   result text := '';
-  i integer;
 begin
   for i in 1..6 loop
-    result := result || substr(
-      chars,
-      1 + floor(random() * length(chars))::int,
-      1
-    );
+    result := result || substr(chars, 1 + floor(random() * length(chars))::int, 1);
   end loop;
-
   return result;
-end;
+end $$;
+
+-- Formato dunha peza: n*n caracteres. Con 32 cores, [0-9a-v.]; con 64, [0-9a-zA-Z_.-].
+-- (Postgres non admite repeticións grandes nunha expresión regular: por iso se comproba a lonxitude á parte.)
+create or replace function public.cx_valid(p text, n int, c int) returns boolean language sql immutable as $$
+  select p is not null and length(p) = n * n
+     and case when c = 64 then p !~ '[^0-9a-zA-Z_.-]' else p !~ '[^0-9a-v.]' end
 $$;
 
--- Marco dunha peza de 40×40: conserva os 4 px exteriores e baleira o interior.
-create or replace function public.cx_frame(p text) returns text language sql immutable as $$
+-- Marco dunha peza de n×n con franxa e: conserva os e px exteriores e baleira o interior.
+create or replace function public.cx_frame(p text, n int, e int) returns text language sql immutable as $$
   select string_agg(
-    case when y < 4 or y >= 36 then substr(p, y*40+1, 40)
-         else substr(p, y*40+1, 4) || repeat('.', 32) || substr(p, y*40+37, 4) end,
+    case when y < e or y >= n - e then substr(p, y*n+1, n)
+         else substr(p, y*n+1, e) || repeat('.', n - 2*e) || substr(p, y*n+n-e+1, e) end,
     '' order by y)
-  from generate_series(0, 39) as y
+  from generate_series(0, n-1) as y
 $$;
 
 -- A casilla toca por un lado unha peza rematada por esta mesma sesión?
@@ -124,8 +126,10 @@ begin
 end $$;
 
 -- ── API ──────────────────────────────────────────────────────────────
+drop function if exists public.cx_create_game(text,text,text,int,int,boolean);
 create or replace function public.cx_create_game(
-  p_title text, p_creator text, p_session text, p_size int, p_goal int, p_avoid_own boolean
+  p_title text, p_creator text, p_session text, p_size int, p_goal int, p_avoid_own boolean,
+  p_tile int default 40, p_colors int default 32
 ) returns text language plpgsql security definer set search_path = public as $$
 declare g uuid; c text; n int := coalesce(p_size, 7); m int;
 begin
@@ -134,9 +138,10 @@ begin
   m := (n - 1) / 2;
   loop c := cx_make_code(); exit when not exists (select 1 from cx_games where code = c); end loop;
 
-  insert into cx_games (code, title, creator_name, board_size, goal, avoid_own)
+  insert into cx_games (code, title, creator_name, board_size, goal, avoid_own, tile_size, colors)
   values (c, coalesce(nullif(trim(left(p_title, 60)), ''), 'Cadáver exquisito'), left(p_creator, 40),
-          n, least(greatest(coalesce(p_goal, n*n), 1), n*n), coalesce(p_avoid_own, true))
+          n, least(greatest(coalesce(p_goal, n*n), 1), n*n), coalesce(p_avoid_own, true),
+          case when p_tile = 80 then 80 else 40 end, case when p_colors = 64 then 64 else 32 end)
   returning id into g;
   insert into cx_private_games values (g, p_session);
 
@@ -173,7 +178,18 @@ begin
   if target.status <> 'open' then return jsonb_build_object('ok', false, 'code', 'taken'); end if;
 
   select min(ring_no) into ring from cx_tiles where game_id = p_game and status <> 'done';
-  if target.ring_no <> ring then return jsonb_build_object('ok', false, 'code', 'ring'); end if;
+  -- Salto de anel: só se no primeiro anel incompleto xa non queda ningunha casilla que se poida coller
+  -- (todas ocupadas ou bloqueadas), ábrese o seguinte, e só onde xa hai unha peza rematada ao lado.
+  if target.ring_no > ring + 1 then return jsonb_build_object('ok', false, 'code', 'ring'); end if;
+  if target.ring_no = ring + 1 and (
+       exists (select 1 from cx_tiles o where o.game_id = p_game and o.ring_no = ring and o.status = 'open'
+               and not exists (select 1 from cx_tiles e where e.game_id = p_game and e.status = 'editing'
+                               and abs(e.row_no - o.row_no) <= 1 and abs(e.col_no - o.col_no) <= 1))
+       or not exists (select 1 from cx_tiles t where t.game_id = p_game and t.status = 'done'
+                      and abs(t.row_no - p_row) + abs(t.col_no - p_col) = 1)) then
+    return jsonb_build_object('ok', false, 'code', 'ring');
+  end if;
+
 
   if exists (select 1 from cx_tiles t where t.game_id = p_game and t.status = 'editing'
              and abs(t.row_no - p_row) <= 1 and abs(t.col_no - p_col) <= 1) then
@@ -182,13 +198,13 @@ begin
 
   -- Non debuxar pegado á túa propia peza, agás que xa non quede outra opción no anel.
   if g.avoid_own and cx_touches_own(p_game, p_row, p_col, p_session) and exists (
-       select 1 from cx_tiles t where t.game_id = p_game and t.ring_no = ring and t.status <> 'done'
+       select 1 from cx_tiles t where t.game_id = p_game and t.ring_no <= ring + 1 and t.status <> 'done'
          and t.id <> target.id and not cx_touches_own(p_game, t.row_no, t.col_no, p_session)) then
     return jsonb_build_object('ok', false, 'code', 'own');
   end if;
 
   update cx_tiles set status = 'editing', editor_name = coalesce(nullif(trim(left(p_editor, 40)), ''), 'Anónimo'),
-    lock_expires_at = now() + interval '20 minutes', updated_at = now() where id = target.id;
+    lock_expires_at = now() + interval '5 minutes', updated_at = now() where id = target.id;
   update cx_private_tiles set editor_session = p_session, draft = null where tile_id = target.id;
   return jsonb_build_object('ok', true);
 end $$;
@@ -210,26 +226,28 @@ $$;
 create or replace function public.cx_save_draft(
   p_game uuid, p_row int, p_col int, p_session text, p_pixels text
 ) returns jsonb language plpgsql security definer set search_path = public as $$
-declare tid uuid;
+declare tid uuid; g cx_games%rowtype;
 begin
-  if p_pixels is null or p_pixels !~ '^[0-9a-v.]{1600}$' then return jsonb_build_object('ok', false, 'code', 'invalid'); end if;
+  select * into g from cx_games where id = p_game;
+  if not found or not cx_valid(p_pixels, g.tile_size, g.colors) then return jsonb_build_object('ok', false, 'code', 'invalid'); end if;
   select t.id into tid from cx_tiles t join cx_private_tiles p on p.tile_id = t.id
     where t.game_id = p_game and t.row_no = p_row and t.col_no = p_col
       and t.status = 'editing' and p.editor_session = p_session;
   if tid is null then return jsonb_build_object('ok', false, 'code', 'not_yours'); end if;
   update cx_private_tiles set draft = p_pixels where tile_id = tid;
   -- A reserva só se renova na táboa pública de cando en vez, para non encher o tempo real de avisos.
-  update cx_tiles set lock_expires_at = now() + interval '20 minutes', updated_at = now()
-    where id = tid and lock_expires_at < now() + interval '15 minutes';
+  update cx_tiles set lock_expires_at = now() + interval '5 minutes', updated_at = now()
+    where id = tid and lock_expires_at < now() + interval '4 minutes';
   return jsonb_build_object('ok', true);
 end $$;
 
 create or replace function public.cx_finish_tile(
   p_game uuid, p_row int, p_col int, p_session text, p_pixels text
 ) returns jsonb language plpgsql security definer set search_path = public as $$
-declare tid uuid;
+declare tid uuid; g cx_games%rowtype;
 begin
-  if p_pixels is null or p_pixels !~ '^[0-9a-v.]{1600}$' or length(replace(p_pixels, '.', '')) < 40 then
+  select * into g from cx_games where id = p_game;
+  if not found or not cx_valid(p_pixels, g.tile_size, g.colors) or length(replace(p_pixels, '.', '')) < g.tile_size then
     return jsonb_build_object('ok', false, 'code', 'invalid');
   end if;
   perform pg_advisory_xact_lock(hashtext(p_game::text));
@@ -239,7 +257,7 @@ begin
   if tid is null then return jsonb_build_object('ok', false, 'code', 'not_yours'); end if;
 
   update cx_private_tiles set pixels = p_pixels, draft = null where tile_id = tid;
-  update cx_tiles set status = 'done', frame = cx_frame(p_pixels), lock_expires_at = null,
+  update cx_tiles set status = 'done', frame = cx_frame(p_pixels, g.tile_size, g.tile_size / 10), lock_expires_at = null,
     finished_at = now(), updated_at = now() where id = tid;
 
   if not exists (select 1 from cx_tiles where game_id = p_game and status <> 'done') then
@@ -279,13 +297,23 @@ begin
   return jsonb_build_object('ok', true);
 end $$;
 
+-- Cifras para a portada: partidas con movemento nas últimas 24 h e persoas debuxando agora.
+create or replace function public.cx_stats() returns jsonb
+language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    'games', (select count(*) from cx_games g where g.status = 'playing' and (g.created_at > now() - interval '24 hours'
+              or exists (select 1 from cx_tiles t where t.game_id = g.id and t.updated_at > now() - interval '24 hours'))),
+    'drawing', (select count(*) from cx_tiles where status = 'editing' and lock_expires_at > now()))
+$$;
+
 -- Permisos: as auxiliares non se poden chamar desde fóra.
 revoke execute on function public.cx_do_reveal(uuid) from public, anon, authenticated;
 revoke execute on function public.cx_touches_own(uuid,int,int,text) from public, anon, authenticated;
-grant execute on function public.cx_create_game(text,text,text,int,int,boolean) to anon, authenticated;
+grant execute on function public.cx_create_game(text,text,text,int,int,boolean,int,int) to anon, authenticated;
 grant execute on function public.cx_claim_tile(uuid,int,int,text,text) to anon, authenticated;
 grant execute on function public.cx_resume(uuid,text) to anon, authenticated;
 grant execute on function public.cx_save_draft(uuid,int,int,text,text) to anon, authenticated;
 grant execute on function public.cx_finish_tile(uuid,int,int,text,text) to anon, authenticated;
 grant execute on function public.cx_release_tile(uuid,int,int,text) to anon, authenticated;
 grant execute on function public.cx_reveal(uuid,text) to anon, authenticated;
+grant execute on function public.cx_stats() to anon, authenticated;

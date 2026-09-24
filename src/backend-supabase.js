@@ -17,9 +17,9 @@ export function create(url, key) {
 
   return {
     demo: false,
-    async createGame({ title, name, size, goal, avoidOwn }) {
+    async createGame({ title, name, size, goal, avoidOwn, tileSize, colors }) {
       const { data, error } = await sb.rpc('cx_create_game', {
-        p_title: title, p_creator: name, p_session: session, p_size: size, p_goal: goal, p_avoid_own: avoidOwn
+        p_title: title, p_creator: name, p_session: session, p_size: size, p_goal: goal, p_avoid_own: avoidOwn, p_tile: tileSize, p_colors: colors
       })
       return error ? { ok: false, code: 'network', detail: error.message } : { ok: true, gameCode: data }
     },
@@ -40,6 +40,7 @@ export function create(url, key) {
     saveDraft: (g, r, c, pixels) => rpc('cx_save_draft', { ...at(g, r, c), p_pixels: pixels }),
     finish: (g, r, c, pixels) => rpc('cx_finish_tile', { ...at(g, r, c), p_pixels: pixels }),
     release: (g, r, c) => rpc('cx_release_tile', at(g, r, c)),
+    async stats() { const { data } = await sb.rpc('cx_stats'); return data || null },
     reveal: g => rpc('cx_reveal', { p_game: g, p_session: session }),
 
     // onTile(fila) cunha casilla actualizada, ou onTile(null) = "recarga todo". onGame(partida).

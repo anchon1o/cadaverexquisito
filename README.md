@@ -4,13 +4,13 @@ Un debuxo entre moitas mans. Cada persoa pinta unha peza de **40×40 px** vendo 
 
 ## Como se xoga
 
-- O taboleiro medra por aneis desde o centro (1 → 9 → 25 → 49…). Un anel ábrese cando se completa o anterior.
+- O taboleiro medra por aneis desde o centro (1 → 9 → 25 → 49…). Salto de anel: se no anel aberto xa non queda ningunha casilla libre (todas ocupadas ou bloqueadas), pódese pasar ao seguinte, só un, e só nas casillas que xa tocan unha peza rematada.
 - Tamaños: 9, 25, 49 ou 81 pezas.
 - Tocas unha casilla amarela, confirmas e queda reservada para ti. Mentres debuxas, as 8 casillas que a rodean quedan bloqueadas, así que as túas pistas non cambian a metade do traballo.
 - No editor ves a túa peza cun **halo de 4 px** arredor: é o que asoma das veciñas rematadas (lados e esquinas). A liña amarela descontinua marca a franxa túa que verán os demais.
-- **As pezas rematadas non se ven.** No taboleiro só aparece o seu marco; o interior vai tapado. Ti si ves as túas.
+- **As pezas rematadas non se ven.** No taboleiro aparecen completamente tapadas, só coa inicial de quen as fixo; o bordo das veciñas vese unicamente no editor, coa casilla xa reservada. Ti si ves as túas.
 - Opción «ninguén debuxa pegado á súa propia peza» (relaxase soa se xa non queda outra casilla no anel).
-- Unha peza en curso por persoa. A reserva dura 20 minutos desde o último trazo; o borrador gárdase no servidor e no dispositivo.
+- Unha peza en curso por persoa. A reserva dura uns 5 minutos sen debuxar (o editor avisa antes de caducar); o borrador gárdase no servidor e no dispositivo.
 - Cando se enche o taboleiro, **revélase** o debuxo para todo o mundo, con descarga en PNG e nomes de autoría. Quen creou a partida pode revelar antes e liberar casillas atascadas.
 - Editor: lapis, goma, cubo, contagotas (tamén colle cores das pistas), grosores 1/2/4/6, 32 cores (8 familias × 4 tons), desfacer/refacer. Atallos: B, E, G, I, Ctrl+Z.
 - Galego e castelán.
