@@ -2,7 +2,7 @@ import './style.css'
 import * as C from './core.js'
 import { createBackend } from './backend.js'
 import { local } from './store.js'
-import { t, getLang, setLang, joinList } from './i18n.js'
+import { t, getLang, setLang, joinList, LANGS } from './i18n.js'
 
 const app = document.querySelector('#app')
 const $ = (s, root = document) => root.querySelector(s)
@@ -16,6 +16,7 @@ const S = {
   myDone: new Map(),       // "fila_col" -> píxeles das miñas pezas rematadas
   editorOpen: false, showAuthors: false,
   work: null, halo: null, tool: 'pen', brush: 2, color: 24, hist: [], fut: [],
+  recent: [], palOpen: false, mirror: { h: false, v: false }, longPick: local.get('cx_longpick') === '1',
   saveState: ''
 }
 
@@ -26,7 +27,10 @@ const ICONS = {
   pick: '.........##rrr##........##rrrrr#........#RrrrrRR.......##RRrrRRR.......#RRRRRRRR......##RRRRRRR#.....##ggRRRRR##....##gggGRR###....##bggGG###.....##bbbGG##.......#bbbBB##.......##bbBB##........#bbBB##........##bb###.........#b###...........###.............',
   fill: '....................########.......##......##.....##........##....#..........#...##############..#bbbbbbbbbbbb#..##bbbbbbbbbB##...#BBmmmmmmMB#....#BBkmmmmmMB#....##BkmmmmmM#......#BkmmmmmM#......#BBmmmmmM#......##BmmmmM##.......########....................',
   undo: '.....................................##.............###............###########....#############....###......###.....###......##......##......##..............##.............###....###########.....##########...................................................',
-  redo: '.........................................##..............###......###########....#############...###......###....##......###.....##......##......##..............###..............###########......##########...................................................'
+  redo: '.........................................##..............###......###########....#############...###......###....##......###.....##......##......##..............###..............###########......##########...................................................',
+  mirrorH: '.......................##.......#......##......b##.....##.....bb###....##....bbb####...##...bbbb#####..##..bbbbb######.##.bbbbbb######.##.bbbbbb#####..##..bbbbb####...##...bbbb###....##....bbb##.....##.....bb#......##......b.......##.......................',
+  mirrorV: '..############.....##########.......########.........######...........####.............##........................##############..##############........................bb.............bbbb...........bbbbbb.........bbbbbbbb.......bbbbbbbbbb.....bbbbbbbbbbbb..',
+  longPick: '.........##rrr##.###....##rrrrr##...#...#RrrrrRR#.#.#..##RRrrRRR#..##..#RRRRRRRR#...#.##RRRRRRR#.###..#ggRRRRR##....##gggGRR###....##bggGG###.....##bbbGG##.......#bbbBB##.......##bbBB##........#bbBB##........##bb###.........#b###...........###.............'
 }
 const INK = {'a': '#ffd95a', 'A': '#f0a500', 'w': '#f3cf9a', 'W': '#d9a860', 'm': '#dfe5ee', 'M': '#9aa5b5', 'p': '#ff9bb0', 'P': '#e0506a', 'r': '#e0606e', 'R': '#9c2f40', 'g': '#d8efff', 'G': '#8cc8f2', 'b': '#4fa3e8', 'B': '#2f6fde', 'k': '#ffffff', 'K': '#c9d1dc'}
 const icon = k => `<svg viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">${[...ICONS[k]].map((c, i) => c === '.' ? '' : `<rect x="${i % 16}" y="${i >> 4}" width="1.03" height="1.03"${c === '#' ? '' : ` fill="${INK[c]}"`}/>`).join('')}</svg>`
@@ -41,10 +45,16 @@ function toast(text) {
 const fail = res => { if (res?.detail) console.error(res.detail); toast(t('e_' + (res?.code || 'invalid')) + (res?.detail ? ` [${res.detail}]` : '')) }
 
 // ── Entrada ───────────────────────────────────────────────
+// Instalar como app: o navegador avisa cando é posible (Android e escritorio).
+let installer = null
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installer = e; if ($('#name')) renderLobby('', '') })
+window.addEventListener('appinstalled', () => { installer = null })
+
 const recent = () => { try { return JSON.parse(local.get('cx_recent')) || [] } catch { return [] } }
 const remember = g => local.set('cx_recent', JSON.stringify([{ code: g.code, size: g.board_size }, ...recent().filter(r => r.code !== g.code)].slice(0, 8)))
 const forget = code => local.set('cx_recent', JSON.stringify(recent().filter(r => r.code !== code)))
-const pick = { size: 5, tile: 40, colors: 32, open: null }
+const pick = { size: 5, tile: 40, colors: 32, open: null, langs: false }
+const flag = id => `<svg viewBox="0 0 24 16" aria-hidden="true">${LANGS.find(l => l.id === id)?.flag || ''}</svg>`
 // Icona de detalle: unha peza cunha curva feita con bloques grandes (sinxelo) ou pequenos (fino).
 const detailIcon = n => { const k = n === 80 ? 1 : 2, cells = []
   for (let x = 0; x < 12; x += k) { const y = Math.round(10 - 9 * Math.sin(x / 11 * Math.PI)) ; cells.push(`<rect x="${x + 1}" y="${Math.max(1, Math.min(12 - k, y)) + .5}" width="${k}" height="${k}"/>`) }
@@ -65,7 +75,11 @@ function renderLobby(message = '', mode = urlCode() ? 'join' : '') {
   const games = recent()
   app.innerHTML = `
   <main class="lobby">
-    <div class="toplinks"><button class="link" id="help">${t('options')}</button><button class="link" id="lang">${getLang() === 'gl' ? 'Castellano' : 'Galego'}</button></div>
+    <div class="toplinks"><button class="link" id="help">${t('options')}</button>
+      <div class="langpick ${pick.langs ? 'open' : ''}">
+        <button class="flagbtn" id="lang" aria-expanded="${!!pick.langs}" aria-label="${LANGS.find(l => l.id === getLang())?.name}">${flag(getLang())}</button>
+        ${pick.langs ? `<div class="flags">${LANGS.map(l => `<button class="flagbtn ${l.id === getLang() ? 'on' : ''}" data-lang="${l.id}" aria-label="${l.name}" title="${l.name}">${flag(l.id)}</button>`).join('')}</div>` : ''}
+      </div></div>
     <div class="folds" aria-hidden="true">${'<i></i>'.repeat(9)}</div>
     <h1>${t('appName')}</h1>
     <p class="lead">${t('tagline')}</p>
@@ -89,13 +103,16 @@ function renderLobby(message = '', mode = urlCode() ? 'join' : '') {
       <button class="btn primary" id="join">${t('join')}</button></div></section>` : ''}
     ${games.length ? `<section class="mine"><h2>${t('myGames')}</h2>${games.map(g => `<button class="gamerow" data-code="${esc(g.code)}">${gridIcon(g.size || 7)}<b>${esc(g.code)}</b></button>`).join('')}</section>` : ''}
     <p class="stats" id="stats"></p>
+    ${installer ? `<button class="btn small wide" id="install">${t('install')}</button>` : ''}
     ${api.demo ? `<p class="note">${t('demoNote')}</p>` : ''}
   </main><div id="sheet"></div>`
   api.stats().then(st => { const el = $('#stats'); if (el && st && st.games) el.innerHTML = `<i></i>${t(st.games === 1 ? 'stats1' : 'statsN', { g: st.games })}${st.drawing ? ' ' + t(st.drawing === 1 ? 'drawing1' : 'drawingN', { d: st.drawing }) : ''}` }).catch(() => {})
+  if ($('#install')) $('#install').onclick = async () => { const p = installer; installer = null; renderLobby('', mode); p.prompt(); await p.userChoice }
   const keepName = () => local.set('cx_name', $('#name').value.trim())
   const name = () => { const v = $('#name').value.trim(); if (!v) { $('#err').textContent = t('needName'); $('#name').focus(); return null } local.set('cx_name', v); return v }
-  $('#lang').onclick = () => { keepName(); setLang(getLang() === 'gl' ? 'es' : 'gl'); renderLobby('', mode) }
-  $('#help').onclick = showHelp
+  $('#lang').onclick = () => { keepName(); pick.langs = !pick.langs; renderLobby('', mode) }
+  document.querySelectorAll('[data-lang]').forEach(b => b.onclick = () => { keepName(); pick.langs = false; setLang(b.dataset.lang); renderLobby('', mode) })
+  $('#help').onclick = () => showHelp(0)
   $('#mCreate').onclick = () => { keepName(); pick.open = null; renderLobby('', mode === 'create' ? '' : 'create') }
   $('#mJoin').onclick = () => { keepName(); renderLobby('', mode === 'join' ? '' : 'join'); $('#code')?.focus() }
   document.querySelectorAll('.gamerow').forEach(b => b.onclick = () => { if (name()) enter(b.dataset.code) })
@@ -114,8 +131,47 @@ function renderLobby(message = '', mode = urlCode() ? 'join' : '') {
     fail(res); renderLobby('', 'create')
   }
 }
-function showHelp() {
-  sheet({ title: t('options'), html: `<ol class="help">${[1, 2, 3, 4].map(i => `<li>${t('help' + i)}</li>`).join('')}</ol>` })
+// ── Titorial en 5 pasos ───────────────────────────────────
+// Cada paso ten unha ilustración feita coas mesmas pezas visuais do xogo.
+const TUTO = [
+  () => `<svg viewBox="0 0 120 70" aria-hidden="true" class="tut">
+    ${[0, 1, 2].map(r => [0, 1, 2].map(c => `<rect class="hid" x="${8 + c * 20}" y="${4 + r * 20}" width="18" height="18"/>`).join('')).join('')}
+    <rect class="paper" x="28" y="24" width="18" height="18"/><path class="ink" d="M30 40 L36 28 L40 36 L44 26"/>
+    <text class="q" x="88" y="42">?</text></svg>`,
+  () => `<svg viewBox="0 0 120 70" aria-hidden="true" class="tut">
+    ${[0, 1, 2].map(r => [0, 1, 2].map(c => {
+      const cls = r === 1 && c === 1 ? 'live' : (r + c) % 2 ? 'free' : 'hid'
+      return `<rect class="${cls}" x="${24 + c * 20}" y="${4 + r * 20}" width="18" height="18"/>`
+    }).join('')).join('')}
+    
+    <path class="cursor" d="M66 46 l0 14 l4 -4 l3 6 l3 -2 l-3 -6 l5 0 z"/></svg>`,
+  () => `<svg viewBox="0 0 120 70" aria-hidden="true" class="tut">
+    <rect class="halo" x="34" y="4" width="52" height="62"/>
+    <rect class="paper" x="40" y="10" width="40" height="50"/>
+    <path class="ink" d="M34 22 h6 M34 46 h6 M80 30 h6 M52 4 v6 M64 66 v-6"/>
+    <path class="ink2" d="M40 22 q10 4 14 24 M80 30 q-10 -2 -16 6"/>
+    <rect class="guide" x="46" y="16" width="28" height="38"/></svg>`,
+  () => `<svg viewBox="0 0 120 70" aria-hidden="true" class="tut tools"></svg>`,
+  () => `<svg viewBox="0 0 120 70" aria-hidden="true" class="tut">
+    ${[0, 1, 2].map(r => [0, 1, 2].map(c => `<rect class="paper" x="8 " y="0" width="0" height="0"/><rect class="paper" x="${8 + c * 20}" y="${4 + r * 20}" width="18" height="18"/><path class="ink" d="M${11 + c * 20} ${16 + r * 20} q4 -${8 + (r + c) % 3 * 3} 12 -2"/>`).join('')).join('')}
+    <path class="star" d="M92 12 l3 7 l7 1 l-5 5 l1 7 l-6 -3 l-6 3 l1 -7 l-5 -5 l7 -1 z"/></svg>`
+]
+let tutoStep = 0
+function showHelp(step = 0) {
+  tutoStep = Math.max(0, Math.min(TUTO.length - 1, step))
+  const i = tutoStep, last = i === TUTO.length - 1
+  let art = TUTO[i]()
+  if (i === 3) art = `<div class="tuttools">${[['pen', 'pen'], ['eraser', 'eraser'], ['fill', 'fill'], ['pick', 'pick'], ['undo', 'undo'], ['mirrorH', 'mirrorH'], ['longPick', 'longPick']].map(([k]) => `<span class="tool">${icon(k)}</span>`).join('')}</div>`
+  sheet({
+    title: t('tut' + (i + 1) + 'T'),
+    html: `<div class="tutart">${art}</div><p class="tuttext">${t('tut' + (i + 1))}</p>
+      <div class="dots">${TUTO.map((_, k) => `<i class="${k === i ? 'on' : ''}"></i>`).join('')}</div>`,
+    ok: last ? t('tutEnd') : t('tutNext'),
+    keepOpen: !last, hideCancel: last,
+    run: () => { if (!last) showHelp(i + 1) },
+    back: i > 0 ? () => showHelp(i - 1) : null
+  })
+  local.set('cx_seen_help', '1')
 }
 
 async function enter(code) {
@@ -144,7 +200,7 @@ function ping() {
       o.connect(g).connect(audio.destination); o.start(at); o.stop(at + .14)
     })
   } catch {}
-  if (document.hidden) { document.title = '● ' + t('freeNow'); document.addEventListener('visibilitychange', () => { document.title = 'Cadáver exquisito colectivo' }, { once: true }) }
+  if (document.hidden) { document.title = '● ' + t('freeNow'); document.addEventListener('visibilitychange', () => { document.title = t('appName') }, { once: true }) }
 }
 
 function leaveGame() {
@@ -187,7 +243,7 @@ function renderGame() {
   const revealed = S.game.status === 'revealed'
   app.innerHTML = `
   <header class="bar">
-    <button class="homebtn" id="home" aria-label="${t('menu')}" title="${t('menu')}">${logo}<span class="wordmark">Cadáver<br>exquisito</span></button>
+    <button class="homebtn" id="home" aria-label="${t('menu')}" title="${t('menu')}">${logo}<span class="wordmark">${esc(t('appName')).replace(' ', '<br>')}</span></button>
     <div class="barbtns"><button class="btn small" id="helpG" aria-label="${t('options')}">?</button><button class="btn small" id="share">${t('share')}</button></div>
   </header>
   <main class="stage ${revealed ? 'is-revealed' : ''}">
@@ -199,7 +255,7 @@ function renderGame() {
   <div id="sheet"></div>
   <div id="editor" class="editor" hidden></div>`
   $('#share').onclick = share
-  $('#helpG').onclick = showHelp
+  $('#helpG').onclick = () => showHelp(0)
   $('#home').onclick = leaveGame
   $('#codechip').onclick = async () => { try { await navigator.clipboard.writeText(S.game.code); toast(t('codeCopied')) } catch { toast(S.game.code) } }
   paintGame(true)
@@ -312,20 +368,23 @@ function tapCell(tile, state) {
   sheet({ title: t('blockedTitle'), body: state === 'blocked' ? t('blockedBody', { n: joinList([...new Set(C.blockers(S.tiles, tile))]) }) : t(state === 'own' ? 'ownBody' : 'futureBody') })
 }
 
-function sheet({ title, body, html, ok, run, danger }) {
+function sheet({ title, body, html, ok, run, danger, keepOpen, back, hideCancel }) {
   const el = $('#sheet')
   el.innerHTML = `<div class="scrim"></div><div class="sheetbox" role="dialog" aria-modal="true" aria-label="${esc(title)}">
     <h2>${esc(title)}</h2>${body ? `<p>${esc(body)}</p>` : ''}${html || ''}
-    <div class="actions">${ok ? `<button class="btn ${danger ? 'danger' : 'hint'}" id="sOk">${esc(ok)}</button>` : ''}
-    <button class="btn" id="sNo">${t(ok ? 'cancel' : 'close')}</button></div></div>`
-  $('.scrim', el).onclick = $('#sNo', el).onclick = closeSheet
-  if (ok) $('#sOk', el).onclick = async e => { e.target.disabled = true; await run(); closeSheet() }
-  ;($('#sOk', el) || $('#sNo', el)).focus()
+    <div class="actions">${back ? `<button class="btn" id="sBack">${t('tutBack')}</button>` : ''}
+    ${ok ? `<button class="btn ${danger ? 'danger' : 'hint'}" id="sOk">${esc(ok)}</button>` : ''}
+    ${hideCancel ? '' : `<button class="btn" id="sNo">${t(ok && !keepOpen ? 'cancel' : 'close')}</button>`}</div></div>`
+  $('.scrim', el).onclick = closeSheet
+  if ($('#sNo', el)) $('#sNo', el).onclick = closeSheet
+  if (back) $('#sBack', el).onclick = back
+  if (ok) $('#sOk', el).onclick = async e => { e.target.disabled = true; await run(); if (!keepOpen) closeSheet() }
+  ;($('#sOk', el) || $('#sNo', el) || $('.sheetbox', el)).focus?.()
 }
 function closeSheet() { const el = $('#sheet'); if (el) el.innerHTML = '' }
 
 async function share() {
-  const url = `${location.origin}${location.pathname}?game=${S.game.code}`
+  const url = `${location.origin}/s/${S.game.code}`
   try { if (navigator.share) return await navigator.share({ title: t('appName'), url }) } catch { return }
   try { await navigator.clipboard.writeText(url); toast(t('copied')) } catch { toast(url) }
 }
@@ -352,14 +411,35 @@ function projectReveal() {
 }
 
 function downloadPng() {
-  const n = S.game.board_size, k = 12, cv = document.createElement('canvas'), tmp = document.createElement('canvas')
-  cv.width = cv.height = n * C.TILE * k; tmp.width = tmp.height = C.TILE
+  const n = S.game.board_size, k = 12, side = n * C.TILE * k
+  const names = [...new Set(S.tiles.filter(x => x.art).map(x => (x.editor_name || '').trim()).filter(Boolean))]
+  const pad = Math.round(side * .03), lineH = Math.round(side * .028)
+  // Pé: código da sala e quen debuxou. Dúas liñas de nomes como máximo.
+  const cv = document.createElement('canvas'), tmp = document.createElement('canvas')
+  const foot = pad * 2 + lineH * 3
+  cv.width = side; cv.height = side + foot
+  tmp.width = tmp.height = C.TILE
   const ctx = cv.getContext('2d'); ctx.imageSmoothingEnabled = false
   ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height)
   for (const tile of S.tiles) if (tile.art) {
     drawTile(tmp.getContext('2d'), C.decode(tile.art), false)
     ctx.drawImage(tmp, tile.col_no * C.TILE * k, tile.row_no * C.TILE * k, C.TILE * k, C.TILE * k)
   }
+  ctx.fillStyle = '#14213d'; ctx.fillRect(0, side, cv.width, foot)
+  ctx.textBaseline = 'top'
+  ctx.font = `600 ${lineH}px "Pixelify Sans", monospace`
+  ctx.fillStyle = '#ffc93c'; ctx.fillText(`${t('appName')} · ${S.game.code}`, pad, side + pad)
+  ctx.fillStyle = '#e6eaf2'; ctx.font = `${Math.round(lineH * .8)}px "Pixelify Sans", monospace`
+  let line = '', y = side + pad + lineH * 1.15, lines = 0
+  for (const word of names) {
+    const next = line ? line + ' · ' + word : word
+    if (ctx.measureText(next).width > cv.width - pad * 2 && line) {
+      ctx.fillText(lines === 1 ? line + ' …' : line, pad, y)
+      if (++lines === 2) { line = ''; break }
+      y += lineH * .95; line = word
+    } else line = next
+  }
+  if (line) ctx.fillText(line, pad, y)
   cv.toBlob(blob => {
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob)
     a.download = `cadaver-exquisito-${S.game.code}.png`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000)
@@ -381,9 +461,10 @@ function openEditor() {
   S.editorOpen = true
   const el = $('#editor'); el.hidden = false
   el.innerHTML = `
-    <div class="edbar"><button class="btn small" id="edBack" aria-label="${t('back')}">‹aria-label="${t('back')}">‹&nbsp;${t('backShort')}</button>nbsp;${t('backShort')}</button>
+    <div class="edbar"><button class="btn small" id="edBack">‹ ${t('backShort')}</button>
       ${miniMap()}<strong>${t('tile')}</strong><span id="saveState"></span>
-      <span class="zoomctl"><button class="btn small" id="zOut" aria-label="${t('zoomOut')}">−</button><button class="btn small" id="zIn" aria-label="${t('zoomIn')}">+</button></span></div>
+      <span class="zoomctl"><button class="btn small" id="zOut" aria-label="${t('zoomOut')}">−</button><button class="btn small" id="zIn" aria-label="${t('zoomIn')}">+</button>
+        <button class="btn small" id="edHelp" aria-label="${t('options')}">?</button></span></div>
     <div class="edbody">
       <div class="canvaswrap" id="wrap"><canvas id="cv" aria-label="${t('tile', { t: '' })}"></canvas></div>
       <div class="panel">
@@ -393,8 +474,18 @@ function openEditor() {
           <button class="tool" id="undo" title="${t('undo')}" aria-label="${t('undo')}">${icon('undo')}</button>
           <button class="tool" id="redo" title="${t('redo')}" aria-label="${t('redo')}">${icon('redo')}</button>
         </div>
+        <div class="toolrow opts">
+          ${[['mirH', 'mirrorH'], ['mirV', 'mirrorV'], ['lpick', 'longPick']].map(([id, k]) =>
+            `<button class="tool opt2" id="${id}" title="${t(k)}" aria-label="${t(k)}">${icon(k)}</button>`).join('')}
+          <span class="gap"></span>
+        </div>
         <div class="toolrow" id="sizes" aria-label="${t('brush')}">${C.BRUSHES.map(s => `<button class="tool size" data-size="${s}" aria-label="${t('brush')} ${s}"><i style="--s:${s}"></i></button>`).join('')}</div>
-        <div class="palette ${C.NCOLORS === 64 ? 'p64' : ''}" id="palette">${C.COLORS.map((c, i) => `<button class="sw" data-color="${i}" style="background:${c}" aria-label="${c}"></button>`).join('')}</div>
+        <div class="palwrap">
+          <div class="palette ${C.NCOLORS === 64 ? 'p64' : ''} ${S.palOpen ? 'open' : ''}" id="palette">${C.COLORS.map((c, i) => `<button class="sw" data-color="${i}" style="background:${c}" aria-label="${c}"></button>`).join('')}</div>
+          <div class="palbar"><div class="recent" id="recent"></div>
+            <button class="tool palmore" id="palMore" aria-expanded="${S.palOpen}" aria-label="${t('morecolors')}"><i class="caret"></i></button></div>
+        </div>
+
         <p class="tip">${t('edHint')}</p>
         <div class="actions"><button class="btn hint" id="publish">${t('publish')}</button><button class="btn" id="release">${t('release')}</button></div>
       </div>
@@ -402,7 +493,14 @@ function openEditor() {
   $('#edBack').onclick = closeEditor
   $('#tools').onclick = e => { const b = e.target.closest('[data-tool]'); if (b) { S.tool = b.dataset.tool; syncTools() } }
   $('#sizes').onclick = e => { const b = e.target.closest('[data-size]'); if (b) { S.brush = +b.dataset.size; syncTools() } }
-  $('#palette').onclick = e => { const b = e.target.closest('[data-color]'); if (b) { S.color = +b.dataset.color; if (S.tool !== 'fill') S.tool = 'pen'; syncTools() } }
+  const useColor = i => { S.color = i; S.recent = [i, ...S.recent.filter(v => v !== i)].slice(0, 7); if (S.tool !== 'fill' && S.tool !== 'eraser') S.tool = 'pen'; syncTools() }
+  $('#palette').onclick = e => { const b = e.target.closest('[data-color]'); if (b) useColor(+b.dataset.color) }
+  $('#recent').onclick = e => { const b = e.target.closest('[data-color]'); if (b) useColor(+b.dataset.color) }
+  $('#palMore').onclick = () => { S.palOpen = !S.palOpen; $('#palette').classList.toggle('open', S.palOpen); $('#palMore').setAttribute('aria-expanded', S.palOpen); fitCanvas() }
+  $('#mirH').onclick = () => { S.mirror.h = !S.mirror.h; syncTools() }
+  $('#mirV').onclick = () => { S.mirror.v = !S.mirror.v; syncTools() }
+  $('#lpick').onclick = () => { S.longPick = !S.longPick; local.set('cx_longpick', S.longPick ? '1' : '0'); syncTools() }
+  S.pickColor = useColor
   $('#undo').onclick = () => step(S.hist, S.fut)
   $('#redo').onclick = () => step(S.fut, S.hist)
   $('#publish').onclick = askPublish
@@ -415,9 +513,10 @@ function openEditor() {
   })
   const cv = $('#cv')
   cv.onpointerdown = strokeStart; cv.onpointermove = strokeMove; cv.onpointerup = cv.onpointercancel = strokeEnd
+  $('#edHelp').onclick = () => showHelp(3)
   $('#zIn').onclick = () => setZoom(zoom * 1.5); $('#zOut').onclick = () => setZoom(zoom / 1.5)
   $('#wrap').onwheel = e => { if (e.ctrlKey) { e.preventDefault(); setZoom(zoom * (e.deltaY < 0 ? 1.2 : 1 / 1.2), e.clientX, e.clientY) } }
-  zoom = 1; pointers.clear(); pinch = null
+  zoom = 0; pointers.clear(); pinch = null
   syncTools(); fitCanvas()
 }
 // Mapa pequeno: onde está a túa peza dentro do taboleiro.
@@ -438,6 +537,13 @@ function syncTools() {
   document.querySelectorAll('[data-size]').forEach(b => b.classList.toggle('on', +b.dataset.size === S.brush))
   document.querySelectorAll('[data-color]').forEach(b => b.classList.toggle('on', +b.dataset.color === S.color))
   if ($('#undo')) { $('#undo').disabled = !S.hist.length; $('#redo').disabled = !S.fut.length }
+  const rec = $('#recent')
+  if (rec) {
+    const list = [S.color, ...S.recent.filter(v => v !== S.color)].slice(0, 7)
+    rec.innerHTML = list.map(i => `<button class="sw ${i === S.color ? 'on' : ''}" data-color="${i}" style="background:${C.COLORS[i]}" aria-label="${C.COLORS[i]}"></button>`).join('')
+  }
+  for (const [id, on] of [['mirH', S.mirror.h], ['mirV', S.mirror.v], ['lpick', S.longPick]])
+    if ($('#' + id)) { $('#' + id).classList.toggle('on', on); $('#' + id).setAttribute('aria-pressed', on) }
   if ($('#saveState')) $('#saveState').textContent = S.saveState ? t(S.saveState) : ''
 }
 
@@ -461,7 +567,8 @@ function pinchStart(e) {
   if (pointers.size !== 2) return false
   if (S.stroke) { S.stroke = null; if (S.hist.length) S.work = S.hist.pop(); drawEditor() }   // o trazo empezado co primeiro dedo desfaise
   const [a, b] = [...pointers.values()], wrap = $('#wrap')
-  pinch = { dist: Math.hypot(a.x - b.x, a.y - b.y), zoom, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2, sl: wrap.scrollLeft, st: wrap.scrollTop }
+  clearTimeout(S.pickTimer); S.pickTimer = null
+  pinch = { dist: Math.hypot(a.x - b.x, a.y - b.y), zoom, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2, sl: wrap.scrollLeft, st: wrap.scrollTop, t: Date.now(), moved: false }
   return true
 }
 function pinchMove(e) {
@@ -470,7 +577,9 @@ function pinchMove(e) {
   if (!pinch || pointers.size !== 2) return !!pinch
   const [a, b] = [...pointers.values()], wrap = $('#wrap'), r = wrap.getBoundingClientRect()
   const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2
-  const z = Math.max(1, Math.min(8, pinch.zoom * Math.hypot(a.x - b.x, a.y - b.y) / pinch.dist)), k = z / pinch.zoom
+  const dist = Math.hypot(a.x - b.x, a.y - b.y)
+  if (Math.abs(dist - pinch.dist) > 12 || Math.abs(mx - pinch.mx) > 12 || Math.abs(my - pinch.my) > 12) pinch.moved = true
+  const z = Math.max(1, Math.min(8, pinch.zoom * dist / pinch.dist)), k = z / pinch.zoom
   zoom = z
   const side = cell * C.VIEW * zoom; $('#cv').style.width = $('#cv').style.height = side + 'px'
   wrap.scrollLeft = (pinch.sl + pinch.mx - r.left) * k - (mx - r.left)
@@ -478,16 +587,29 @@ function pinchMove(e) {
   if ($('#zOut')) { $('#zOut').disabled = zoom <= 1; $('#zIn').disabled = zoom >= 8 }
   return true
 }
-function pinchEnd(e) { pointers.delete(e.pointerId); if (pointers.size < 2) pinch = null }
+function pinchEnd(e) {
+  pointers.delete(e.pointerId)
+  if (pointers.size < 2 && pinch) {
+    // Toque rápido con dous dedos = desfacer, coma nas apps de debuxo.
+    if (!pinch.moved && Date.now() - pinch.t < 300 && S.hist.length) { step(S.hist, S.fut); syncTools(); try { navigator.vibrate?.(30) } catch {} }
+    pinch = null
+  }
+}
 
 function fitCanvas() {
   const wrap = $('#wrap'), cv = $('#cv'); if (!wrap || !cv) return
   const room = Math.min(wrap.clientWidth, wrap.clientHeight || wrap.clientWidth)
   cell = Math.max(2, Math.floor(room / C.VIEW))
+  if (!zoom) zoom = cell < 5 ? 2 : 1        // en fino, entrar xa cun píxel usable
   const dpr = Math.min(3, window.devicePixelRatio || 1), side = cell * C.VIEW
   cv.style.width = cv.style.height = side * zoom + 'px'
   cv.width = cv.height = Math.round(side * dpr)
   cv.getContext('2d').setTransform(cv.width / C.VIEW, 0, 0, cv.width / C.VIEW, 0, 0)
+  requestAnimationFrame(() => {                               // arrincar centrado, xa co tamaño novo aplicado
+    wrap.scrollLeft = (wrap.scrollWidth - wrap.clientWidth) / 2
+    wrap.scrollTop = (wrap.scrollHeight - wrap.clientHeight) / 2
+  })
+  if ($('#zOut')) { $('#zOut').disabled = zoom <= 1; $('#zIn').disabled = zoom >= 8 }
   drawEditor()
 }
 function drawEditor() {
@@ -516,20 +638,23 @@ const toCell = e => {
   const vx = Math.floor((e.clientX - r.left) / r.width * C.VIEW), vy = Math.floor((e.clientY - r.top) / r.height * C.VIEW)
   return { x: clamp(vx - C.EDGE), y: clamp(vy - C.EDGE), vx: Math.max(0, Math.min(C.VIEW - 1, vx)), vy: Math.max(0, Math.min(C.VIEW - 1, vy)) }
 }
+// Colle a cor que hai baixo o punto, tamén nas pistas das veciñas.
+function pickAt(p) {
+  const inside = p.vx >= C.EDGE && p.vx < C.VIEW - C.EDGE && p.vy >= C.EDGE && p.vy < C.VIEW - C.EDGE
+  const v = inside ? S.work[p.y * C.TILE + p.x] : S.halo.px[p.vy * C.VIEW + p.vx]
+  if (v !== C.EMPTY) { S.pickColor ? S.pickColor(v) : (S.color = v); S.tool = 'pen'; syncTools(); try { navigator.vibrate?.(30) } catch {} }
+}
+
 function strokeStart(e) {
   if (!S.work) return
   e.preventDefault()
   e.currentTarget.setPointerCapture(e.pointerId)
   if (pinchStart(e) || !e.isPrimary) return
   const p = toCell(e)
-  if (S.tool === 'pick') {
-    const inside = p.vx >= C.EDGE && p.vx < C.VIEW - C.EDGE && p.vy >= C.EDGE && p.vy < C.VIEW - C.EDGE
-    const v = inside ? S.work[p.y * C.TILE + p.x] : S.halo.px[p.vy * C.VIEW + p.vx]
-    if (v !== C.EMPTY) { S.color = v; S.tool = 'pen'; syncTools() }
-    return
-  }
+  if (S.tool === 'pick') { pickAt(p); return }
+  if (S.longPick) { clearTimeout(S.pickTimer); S.pickTimer = setTimeout(() => { S.pickTimer = null; pickAt(p); if (S.stroke) { S.stroke = null; if (S.hist.length) { S.work = S.hist.pop(); drawEditor() } } }, 450) }
   S.hist.push(S.work.slice()); if (S.hist.length > 60) S.hist.shift(); S.fut = []
-  if (S.tool === 'fill') { C.flood(S.work, p.x, p.y, S.color); drawEditor(); return changed() }
+  if (S.tool === 'fill') { for (const [a, b] of mirrored(p.x, p.y)) C.flood(S.work, a, b, S.color); drawEditor(); return changed() }
   e.currentTarget.setPointerCapture(e.pointerId)
   S.stroke = p; dab(p.x, p.y); drawEditor()
 }
@@ -538,12 +663,21 @@ function strokeMove(e) {
   if (!S.stroke || !e.isPrimary) return
   for (const ev of (e.getCoalescedEvents?.().length ? e.getCoalescedEvents() : [e])) {
     const p = toCell({ currentTarget: e.currentTarget, clientX: ev.clientX, clientY: ev.clientY })
+    if (S.pickTimer && (Math.abs(p.x - S.stroke.x) > 1 || Math.abs(p.y - S.stroke.y) > 1)) { clearTimeout(S.pickTimer); S.pickTimer = null }
     C.line(S.stroke.x, S.stroke.y, p.x, p.y, dab); S.stroke = p
   }
   drawEditor()
 }
-function strokeEnd(e) { if (e) pinchEnd(e); if (S.stroke) { S.stroke = null; changed() } }
-const dab = (x, y) => C.stamp(S.work, x, y, S.brush, S.tool === 'eraser' ? C.EMPTY : S.color)
+function strokeEnd(e) { clearTimeout(S.pickTimer); S.pickTimer = null; if (e) pinchEnd(e); if (S.stroke) { S.stroke = null; changed() } }
+// Espello: cada trazo repítese na metade oposta se está activado.
+const mirrored = (x, y) => {
+  const out = [[x, y]], X = C.TILE - 1 - x, Y = C.TILE - 1 - y
+  if (S.mirror.h) out.push([X, y])
+  if (S.mirror.v) out.push([x, Y])
+  if (S.mirror.h && S.mirror.v) out.push([X, Y])
+  return out
+}
+const dab = (x, y) => { const v = S.tool === 'eraser' ? C.EMPTY : S.color; for (const [a, b] of mirrored(x, y)) C.stamp(S.work, a, b, S.brush, v) }
 function step(from, to) { if (!from.length) return; to.push(S.work.slice()); S.work = from.pop(); drawEditor(); changed() }
 
 let draftTimer = null
@@ -601,4 +735,5 @@ createBackend().then(b => {
   api = b; setLang(getLang())
   const code = urlCode()
   code && local.get('cx_name') ? enter(code) : renderLobby()
+  if (!local.get('cx_seen_help') && !code) setTimeout(() => showHelp(0), 400)   // primeira visita: ábrese o titorial
 })

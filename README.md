@@ -13,7 +13,9 @@ Un debuxo entre moitas mans. Cada persoa pinta unha peza de **40×40 px** vendo 
 - Unha peza en curso por persoa. A reserva dura uns 5 minutos sen debuxar (o editor avisa antes de caducar); o borrador gárdase no servidor e no dispositivo.
 - Cando se enche o taboleiro, **revélase** o debuxo para todo o mundo, con descarga en PNG e nomes de autoría. Quen creou a partida pode revelar antes e liberar casillas atascadas.
 - Editor: lapis, goma, cubo, contagotas (tamén colle cores das pistas), grosores 1/2/4/6, 32 cores (8 familias × 4 tons), desfacer/refacer. Atallos: B, E, G, I, Ctrl+Z.
-- Galego e castelán.
+- Instalable como app no móbil (icona propia), e PNG final co código e os nomes.
+- Titorial de 5 pasos ilustrado, no botón «Como se xoga» (ábrese só a primeira vez).
+- Oito idiomas, escollidos cunha bandeiriña na portada: galego (por defecto), castelán, catalán, éuscaro, portugués, italiano, alemán e inglés.
 
 ## Probar sen servidor
 
@@ -54,6 +56,10 @@ git push -u origin main
    - `VITE_SUPABASE_URL` = a Project URL
    - `VITE_SUPABASE_ANON_KEY` = a clave pública
 3. **Deploy**. Se engades ou cambias as variables despois, hai que facer **Redeploy** para que collan.
+
+Ao compartir desde o xogo, a ligazón é `/s/CÓDIGO`: unha función de Vercel (`api/s.js`) devolve a previsualización con esa partida (cantas pezas van feitas) e redirixe ao xogo. Usa as mesmas dúas variables de Supabase, así que non hai que configurar nada máis.
+
+A imaxe que sae ao compartir a ligazón (WhatsApp, Telegram…) precisa o enderezo absoluto da web. En Vercel cóllese só do dominio de produción; se usas un dominio propio, engade a variable `VITE_SITE_URL` co enderezo completo (por exemplo `https://cadaver.example.com`) e fai **Redeploy**. WhatsApp garda a previsualización na súa caché: para vela de novo, proba cun enlace acurtado ou espera un tempo.
 
 ### Comprobar
 Abre a web: se xa non aparece «Modo demo» na portada, está falando con Supabase. Crea unha partida, ábrea noutro dispositivo co código e reserva unha casilla: no outro ten que aparecer «Debuxando» ao momento.

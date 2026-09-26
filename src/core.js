@@ -3,7 +3,7 @@
 
 // Xeometría e paleta da partida actual. Son "let" exportados: configure() cámbiaos e todos os módulos ven o novo valor.
 export let TILE = 40          // lado dunha peza, en píxeles (40 sinxelo, 80 fino)
-export let EDGE = 4           // franxa exterior que ven os veciños (TILE/10)
+export let EDGE = 4           // franxa exterior que ven os veciños: 4 px en sinxelo, 6 en fino
 export let VIEW = TILE + EDGE * 2
 export let MIN_PAINTED = 40
 export let NCOLORS = 32
@@ -38,7 +38,7 @@ export const BASE64 = (() => {
 
 export function configure(size = 40, colors = 32) {
   TILE = SIZES.includes(size) ? size : 40
-  EDGE = TILE / 10
+  EDGE = TILE === 80 ? 6 : 4
   VIEW = TILE + EDGE * 2
   MIN_PAINTED = TILE
   NCOLORS = PALETTES.includes(colors) ? colors : 32

@@ -257,7 +257,7 @@ begin
   if tid is null then return jsonb_build_object('ok', false, 'code', 'not_yours'); end if;
 
   update cx_private_tiles set pixels = p_pixels, draft = null where tile_id = tid;
-  update cx_tiles set status = 'done', frame = cx_frame(p_pixels, g.tile_size, g.tile_size / 10), lock_expires_at = null,
+  update cx_tiles set status = 'done', frame = cx_frame(p_pixels, g.tile_size, case when g.tile_size = 80 then 6 else 4 end), lock_expires_at = null,
     finished_at = now(), updated_at = now() where id = tid;
 
   if not exists (select 1 from cx_tiles where game_id = p_game and status <> 'done') then
