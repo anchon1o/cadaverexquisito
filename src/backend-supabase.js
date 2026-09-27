@@ -18,51 +18,51 @@ export function create(url, key) {
   return {
     demo: false,
     async createGame({ title, name, size, goal, avoidOwn, tileSize, colors }) {
-      const { data, error } = await sb.rpc('cx_create_game', {
+      const { data, error } = await sb.rpc('cadex_create_game', {
         p_title: title, p_creator: name, p_session: session, p_size: size, p_goal: goal, p_avoid_own: avoidOwn, p_tile: tileSize, p_colors: colors
       })
       return error ? { ok: false, code: 'network', detail: error.message } : { ok: true, gameCode: data }
     },
     async getGame(code) {
-      const { data } = await sb.from('cx_games').select('*').eq('code', code).maybeSingle()
+      const { data } = await sb.from('cadex_games').select('*').eq('code', code).maybeSingle()
       return data || null
     },
     async loadTiles(gameId) {
-      const { data, error } = await sb.from('cx_tiles').select('*').eq('game_id', gameId)
+      const { data, error } = await sb.from('cadex_tiles').select('*').eq('game_id', gameId)
       if (data) for (const t of data) if (t.status === 'done') seenDone.add(t.id)
       return error ? null : data
     },
     async resume(gameId) {
-      const { data } = await sb.rpc('cx_resume', { p_game: gameId, p_session: session })
+      const { data } = await sb.rpc('cadex_resume', { p_game: gameId, p_session: session })
       return data || { creator: false, editing: null, mine: [] }
     },
-    claim: (g, r, c, name) => rpc('cx_claim_tile', { ...at(g, r, c), p_editor: name }),
-    saveDraft: (g, r, c, pixels) => rpc('cx_save_draft', { ...at(g, r, c), p_pixels: pixels }),
-    finish: (g, r, c, pixels) => rpc('cx_finish_tile', { ...at(g, r, c), p_pixels: pixels }),
-    release: (g, r, c) => rpc('cx_release_tile', at(g, r, c)),
-    async recent(codes) { const { data } = await sb.rpc('cx_recent', { p_codes: codes, p_session: session }); return data || [] },
-    deleteGame: code => rpc('cx_delete_game', { p_code: code, p_session: session }),
-    async stats() { const { data } = await sb.rpc('cx_stats'); return data || null },
-    reveal: g => rpc('cx_reveal', { p_game: g, p_session: session }),
+    claim: (g, r, c, name) => rpc('cadex_claim_tile', { ...at(g, r, c), p_editor: name }),
+    saveDraft: (g, r, c, pixels) => rpc('cadex_save_draft', { ...at(g, r, c), p_pixels: pixels }),
+    finish: (g, r, c, pixels) => rpc('cadex_finish_tile', { ...at(g, r, c), p_pixels: pixels }),
+    release: (g, r, c) => rpc('cadex_release_tile', at(g, r, c)),
+    async recent(codes) { const { data } = await sb.rpc('cadex_recent', { p_codes: codes, p_session: session }); return data || [] },
+    deleteGame: code => rpc('cadex_delete_game', { p_code: code, p_session: session }),
+    async stats() { const { data } = await sb.rpc('cadex_stats'); return data || null },
+    reveal: g => rpc('cadex_reveal', { p_game: g, p_session: session }),
 
     // onTile(fila) cunha casilla actualizada, ou onTile(null) = "recarga todo". onGame(partida).
     unsubscribe() { if (channel) { sb.removeChannel(channel); channel = null } },
     subscribe(gameId, onTile, onGame) {
       if (channel) sb.removeChannel(channel)
-      channel = sb.channel('cx-' + gameId)
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'cx_tiles', filter: `game_id=eq.${gameId}` },
+      channel = sb.channel('cadex-' + gameId)
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'cadex_tiles', filter: `game_id=eq.${gameId}` },
           async ({ new: row }) => {
             if (row.status === 'done') {
               if (seenDone.has(row.id)) return
               seenDone.add(row.id)
               // As columnas longas poden non vir no aviso: pídese a fila enteira.
-              const { data } = await sb.from('cx_tiles').select('*').eq('id', row.id).maybeSingle()
+              const { data } = await sb.from('cadex_tiles').select('*').eq('id', row.id).maybeSingle()
               return onTile(data || null)
             }
             const { frame, art, ...meta } = row
             onTile({ ...meta, frame: null, art: null })
           })
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'cx_games', filter: `id=eq.${gameId}` },
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'cadex_games', filter: `id=eq.${gameId}` },
           ({ new: row }) => onGame(row))
         .subscribe()
     }

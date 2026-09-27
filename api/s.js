@@ -21,10 +21,10 @@ export default async function handler(req, res) {
 
   try {
     if (code && URL_SB && KEY_SB) {
-      const games = await ask(`cx_games?code=eq.${code}&select=id,board_size,goal,status`)
+      const games = await ask(`cadex_games?code=eq.${code}&select=id,board_size,goal,status`)
       const game = games && games[0]
       if (game) {
-        const tiles = await ask(`cx_tiles?select=status&game_id=eq.${game.id}`) || []
+        const tiles = await ask(`cadex_tiles?select=status&game_id=eq.${game.id}`) || []
         const done = tiles.filter(t => t.status === 'done').length
         const goal = game.goal || game.board_size * game.board_size
         title = `Cadáver exquisito · ${code}`

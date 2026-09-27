@@ -70,11 +70,11 @@ Copia `.env.example` como `.env`, pon os dous valores e `npm install && npm run 
 
 As partidas gárdanse ata que alguén as borra. Na lista da portada cabe unha ducia e as que xa non existen quítanse soas.
 
-O esquema usa o prefixo `cx_`. Se executaches o da versión anterior, as táboas `ce_` xa non se usan e pódense borrar.
+O esquema usa o prefixo `cadex_` en táboas e funcións, así que o proxecto de Supabase pode compartirse con outras aplicacións.
 
 ## Seguridade
 
-- As táboas públicas (`cx_games`, `cx_tiles`) non conteñen debuxos nin sesións: dunha peza rematada só se publica o marco. Debuxos, borradores e sesións están en táboas `cx_private_*` sen ningún permiso de lectura.
+- As táboas públicas (`cadex_games`, `cadex_tiles`) non conteñen debuxos nin sesións: dunha peza rematada só se publica o marco. Debuxos, borradores e sesións están en táboas `cadex_private_*` sen ningún permiso de lectura.
 - O debuxo completo só pasa á columna pública `art` no momento da revelación.
 - Todas as escrituras van por funcións `SECURITY DEFINER` que comproban anel activo, veciñas en edición, propiedade da reserva e formato dos píxeles.
 - A sesión é un identificador aleatorio gardado no navegador. Quen crea a partida ten que usar o mesmo navegador para revelala.
