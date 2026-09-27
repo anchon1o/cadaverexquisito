@@ -14,6 +14,7 @@ Un debuxo entre moitas mans. Cada persoa pinta unha peza de **40×40 px** vendo 
 - Cando se enche o taboleiro, **revélase** o debuxo para todo o mundo, con descarga en PNG e nomes de autoría. Quen creou a partida pode revelar antes e liberar casillas atascadas.
 - Editor: lapis, goma, cubo, contagotas (tamén colle cores das pistas), grosores 1/2/4/6, 32 cores (8 familias × 4 tons), desfacer/refacer. Atallos: B, E, G, I, Ctrl+Z.
 - Instalable como app no móbil (icona propia), e PNG final co código e os nomes.
+- Na portada, as túas partidas co progreso real; pódense quitar da lista, e borrar de vez as que creaches e aínda están baleiras.
 - Titorial de 5 pasos ilustrado, no botón «Como se xoga» (ábrese só a primeira vez).
 - Oito idiomas, escollidos cunha bandeiriña na portada: galego (por defecto), castelán, catalán, éuscaro, portugués, italiano, alemán e inglés.
 
@@ -66,6 +67,8 @@ Abre a web: se xa non aparece «Modo demo» na portada, está falando con Supaba
 
 ### En local (opcional)
 Copia `.env.example` como `.env`, pon os dous valores e `npm install && npm run dev`.
+
+As partidas gárdanse ata que alguén as borra. Na lista da portada cabe unha ducia e as que xa non existen quítanse soas.
 
 O esquema usa o prefixo `cx_`. Se executaches o da versión anterior, as táboas `ce_` xa non se usan e pódense borrar.
 

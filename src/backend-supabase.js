@@ -40,6 +40,8 @@ export function create(url, key) {
     saveDraft: (g, r, c, pixels) => rpc('cx_save_draft', { ...at(g, r, c), p_pixels: pixels }),
     finish: (g, r, c, pixels) => rpc('cx_finish_tile', { ...at(g, r, c), p_pixels: pixels }),
     release: (g, r, c) => rpc('cx_release_tile', at(g, r, c)),
+    async recent(codes) { const { data } = await sb.rpc('cx_recent', { p_codes: codes, p_session: session }); return data || [] },
+    deleteGame: code => rpc('cx_delete_game', { p_code: code, p_session: session }),
     async stats() { const { data } = await sb.rpc('cx_stats'); return data || null },
     reveal: g => rpc('cx_reveal', { p_game: g, p_session: session }),
 

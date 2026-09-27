@@ -51,8 +51,9 @@ window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); instal
 window.addEventListener('appinstalled', () => { installer = null })
 
 const recent = () => { try { return JSON.parse(local.get('cx_recent')) || [] } catch { return [] } }
-const remember = g => local.set('cx_recent', JSON.stringify([{ code: g.code, size: g.board_size }, ...recent().filter(r => r.code !== g.code)].slice(0, 8)))
+const remember = g => local.set('cx_recent', JSON.stringify([{ code: g.code, size: g.board_size }, ...recent().filter(r => r.code !== g.code)].slice(0, 12)))
 const forget = code => local.set('cx_recent', JSON.stringify(recent().filter(r => r.code !== code)))
+const clearInfo = () => { gamesInfo = {} }   // forza volver pedir o progreso
 const pick = { size: 5, tile: 40, colors: 32, open: null, langs: false }
 const flag = id => `<svg viewBox="0 0 24 16" aria-hidden="true">${LANGS.find(l => l.id === id)?.flag || ''}</svg>`
 // Icona de detalle: unha peza cunha curva feita con bloques grandes (sinxelo) ou pequenos (fino).
@@ -69,6 +70,17 @@ const pickCol = (key, values, ico, label) => {
   </div>`
 }
 const paletteIcon = n => { const cols = n === 64 ? C.BASE64 : C.BASE32, rows = n / 8; return `<svg viewBox="0 0 8 ${rows}" shape-rendering="crispEdges" aria-hidden="true">${cols.map((c, i) => `<rect x="${i % 8}" y="${i / 8 | 0}" width="1.02" height="1.02" fill="${c}"/>`).join('')}</svg>` }
+// Fila dunha partida gardada: grella, código, progreso e un × para quitala.
+const gameRow = g => {
+  const info = gamesInfo[g.code]
+  const state = !info ? '' : info.status === 'revealed' ? t('gDone')
+    : `${info.done}/${info.goal}${info.mine ? ' · ' + t('gMine') : ''}`
+  return `<div class="gamerow ${info && info.status === 'revealed' ? 'old' : ''}">
+    <button class="gamego" data-code="${esc(g.code)}">${gridIcon((info && info.size) || g.size || 7)}<b>${esc(g.code)}</b><small>${esc(state)}</small></button>
+    <button class="gamex" data-drop="${esc(g.code)}" aria-label="${t('gRemove')}">×</button></div>`
+}
+let gamesInfo = {}
+
 const gridIcon = n => `<svg viewBox="0 0 ${n} ${n}" shape-rendering="crispEdges" aria-hidden="true">${Array.from({ length: n * n }, (_, i) => `<rect x="${i % n + .12}" y="${(i / n | 0) + .12}" width=".76" height=".76"/>`).join('')}</svg>`
 
 function renderLobby(message = '', mode = urlCode() ? 'join' : '') {
@@ -101,7 +113,7 @@ function renderLobby(message = '', mode = urlCode() ? 'join' : '') {
     ${mode === 'join' ? `<section class="box"><div class="row">
       <input id="code" maxlength="6" autocapitalize="characters" autocomplete="off" spellcheck="false" aria-label="${t('codePh')}" placeholder="${t('codePh')}" value="${esc(urlCode())}">
       <button class="btn primary" id="join">${t('join')}</button></div></section>` : ''}
-    ${games.length ? `<section class="mine"><h2>${t('myGames')}</h2>${games.map(g => `<button class="gamerow" data-code="${esc(g.code)}">${gridIcon(g.size || 7)}<b>${esc(g.code)}</b></button>`).join('')}</section>` : ''}
+    ${games.length ? `<section class="mine" id="mine"><h2>${t('myGames')}</h2>${games.map(g => gameRow(g)).join('')}</section>` : ''}
     <p class="stats" id="stats"></p>
     ${installer ? `<button class="btn small wide" id="install">${t('install')}</button>` : ''}
     ${api.demo ? `<p class="note">${t('demoNote')}</p>` : ''}
@@ -115,7 +127,9 @@ function renderLobby(message = '', mode = urlCode() ? 'join' : '') {
   $('#help').onclick = () => showHelp(0)
   $('#mCreate').onclick = () => { keepName(); pick.open = null; renderLobby('', mode === 'create' ? '' : 'create') }
   $('#mJoin').onclick = () => { keepName(); renderLobby('', mode === 'join' ? '' : 'join'); $('#code')?.focus() }
-  document.querySelectorAll('.gamerow').forEach(b => b.onclick = () => { if (name()) enter(b.dataset.code) })
+  document.querySelectorAll('[data-code]').forEach(b => b.onclick = () => { if (name()) enter(b.dataset.code) })
+  document.querySelectorAll('[data-drop]').forEach(b => b.onclick = () => dropGame(b.dataset.drop, mode))
+  if (games.length && games.some(g => !gamesInfo[g.code])) loadRecent(mode)
   if ($('#code')) {
     $('#code').oninput = e => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z]/g, '') }
     $('#code').onkeydown = e => { if (e.key === 'Enter') $('#join').click() }
@@ -157,6 +171,36 @@ const TUTO = [
     <path class="star" d="M92 12 l3 7 l7 1 l-5 5 l1 7 l-6 -3 l-6 3 l1 -7 l-5 -5 l7 -1 z"/></svg>`
 ]
 let tutoStep = 0
+// Pídelle ao servidor o estado das partidas gardadas e quita as que xa non existen.
+async function loadRecent(mode) {
+  const codes = recent().map(r => r.code)
+  if (!codes.length || !api.recent) return
+  try {
+    const list = await api.recent(codes)
+    gamesInfo = Object.fromEntries(list.map(g => [g.code, g]))
+    const alive = codes.filter(c => gamesInfo[c])
+    if (alive.length !== codes.length) local.set('cx_recent', JSON.stringify(recent().filter(r => gamesInfo[r.code])))
+    // As túas primeiro, despois as abertas, e ao final as reveladas.
+    const rank = c => { const i = gamesInfo[c]; return !i ? 3 : i.status === 'revealed' ? 2 : i.mine ? 0 : 1 }
+    local.set('cx_recent', JSON.stringify(recent().slice().sort((a, b) => rank(a.code) - rank(b.code))))
+    if ($('#mine')) renderLobby('', mode)
+  } catch {}
+}
+
+// Quitar unha partida da lista. Se a creaches ti e aínda non ten pezas, ofrécese borrala de vez.
+function dropGame(code, mode) {
+  const info = gamesInfo[code], empty = info && info.creator && info.status !== 'revealed' && !info.done
+  const finish = () => { delete gamesInfo[code]; forget(code); renderLobby('', mode) }
+  if (!empty) return sheet({
+    title: t('gRemoveTitle', { c: code }), body: t('gRemoveBody'), ok: t('gRemove'),
+    run: () => finish()
+  })
+  sheet({
+    title: t('gDeleteTitle', { c: code }), body: t('gDeleteBody'), ok: t('gDelete'), danger: true,
+    run: async () => { const r = await api.deleteGame(code); if (!r.ok && r.code !== 'not_empty') fail(r); finish() }
+  })
+}
+
 function showHelp(step = 0) {
   tutoStep = Math.max(0, Math.min(TUTO.length - 1, step))
   const i = tutoStep, last = i === TUTO.length - 1
@@ -204,6 +248,7 @@ function ping() {
 }
 
 function leaveGame() {
+  clearInfo()
   if (S.stroke) strokeEnd()
   flushDraft(); api.unsubscribe()
   Object.assign(S, { game: null, tiles: [], creator: false, mine: null, work: null, myDone: new Map(), editorOpen: false, showAuthors: false, needFull: false, hadOpen: null })
@@ -734,6 +779,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && S.
 createBackend().then(b => {
   api = b; setLang(getLang())
   const code = urlCode()
+  clearInfo()
   code && local.get('cx_name') ? enter(code) : renderLobby()
   if (!local.get('cx_seen_help') && !code) setTimeout(() => showHelp(0), 400)   // primeira visita: ábrese o titorial
 })

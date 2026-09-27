@@ -1,6 +1,16 @@
 import { local } from './store.js'
 
 const gl = {
+  e_not_empty: 'Esa partida xa ten pezas debuxadas.',
+  gDone: 'Revelada',
+  gMine: 'a túa',
+  gRemove: 'Quitar da lista',
+  gRemoveTitle: 'Quitar {c} da lista?',
+  gRemoveBody: 'A partida segue existindo: poderás volver entrar co código.',
+  gDelete: 'Borrar a partida',
+  gDeleteTitle: 'Borrar a partida {c}?',
+  gDeleteBody: 'Creáchela ti e aínda non ten ningunha peza. Bórrase de vez.',
+
   install: 'Instalar no móbil',
   tut1T: 'Un debuxo entre moitas mans',
   tut1: 'Cada persoa pinta unha peza do taboleiro. As pezas rematadas quedan tapadas: ninguén ve o conxunto ata que se revela ao final.',
@@ -54,6 +64,16 @@ const gl = {
   e_not_creator: 'Só pode facelo quen creou a partida.', e_network: 'Fallou a conexión. Téntao de novo.'
 }
 const es = {
+  e_not_empty: 'Esa partida ya tiene piezas dibujadas.',
+  gDone: 'Revelada',
+  gMine: 'la tuya',
+  gRemove: 'Quitar de la lista',
+  gRemoveTitle: '¿Quitar {c} de la lista?',
+  gRemoveBody: 'La partida sigue existiendo: podrás volver a entrar con el código.',
+  gDelete: 'Borrar la partida',
+  gDeleteTitle: '¿Borrar la partida {c}?',
+  gDeleteBody: 'La creaste tú y todavía no tiene ninguna pieza. Se borra del todo.',
+
   install: 'Instalar en el móvil',
   tut1T: 'Un dibujo entre muchas manos',
   tut1: 'Cada persona pinta una pieza del tablero. Las piezas terminadas quedan tapadas: nadie ve el conjunto hasta que se revela al final.',
@@ -107,6 +127,16 @@ const es = {
   e_not_creator: 'Solo puede hacerlo quien creó la partida.', e_network: 'Falló la conexión. Inténtalo de nuevo.'
 }
 const ca = {
+  e_not_empty: 'Aquesta partida ja té peces dibuixades.',
+  gDone: 'Revelada',
+  gMine: 'la teva',
+  gRemove: 'Treure de la llista',
+  gRemoveTitle: 'Treure {c} de la llista?',
+  gRemoveBody: 'La partida continua existint: hi podràs tornar amb el codi.',
+  gDelete: 'Esborrar la partida',
+  gDeleteTitle: 'Esborrar la partida {c}?',
+  gDeleteBody: 'La vas crear tu i encara no té cap peça. S’esborra del tot.',
+
   install: 'Instal·lar al mòbil',
   tut1T: 'Un dibuix entre moltes mans',
   tut1: 'Cada persona pinta una peça del tauler. Les peces acabades queden tapades: ningú no veu el conjunt fins que es revela al final.',
@@ -256,6 +286,16 @@ const ca = {
   e_network: 'Ha fallat la connexió. Torna-ho a provar.'
 }
 const eu = {
+  e_not_empty: 'Partida horrek baditu marraztutako piezak.',
+  gDone: 'Agerian',
+  gMine: 'zurea',
+  gRemove: 'Kendu zerrendatik',
+  gRemoveTitle: '{c} zerrendatik kendu?',
+  gRemoveBody: 'Partida hor jarraitzen du: kodearekin itzuli ahal izango zara.',
+  gDelete: 'Ezabatu partida',
+  gDeleteTitle: '{c} partida ezabatu?',
+  gDeleteBody: 'Zuk sortu zenuen eta oraindik ez du piezarik. Betiko ezabatuko da.',
+
   install: 'Instalatu mugikorrean',
   tut1T: 'Marrazki bat esku askoren artean',
   tut1: 'Pertsona bakoitzak taulako pieza bat margotzen du. Amaitutako piezak estalita geratzen dira: inork ez du multzoa ikusten amaieran agerian jarri arte.',
@@ -405,6 +445,16 @@ const eu = {
   e_network: 'Konexioak huts egin du. Saiatu berriro.'
 }
 const it = {
+  e_not_empty: 'Quella partita ha già dei tasselli disegnati.',
+  gDone: 'Rivelata',
+  gMine: 'il tuo',
+  gRemove: 'Togli dall’elenco',
+  gRemoveTitle: 'Togliere {c} dall’elenco?',
+  gRemoveBody: 'La partita continua a esistere: potrai rientrare con il codice.',
+  gDelete: 'Elimina la partita',
+  gDeleteTitle: 'Eliminare la partita {c}?',
+  gDeleteBody: 'L’hai creata tu e non ha ancora nessun tassello. Viene eliminata del tutto.',
+
   install: 'Installa sul telefono',
   tut1T: 'Un disegno fatto da molte mani',
   tut1: 'Ogni persona dipinge un tassello del tabellone. I tasselli finiti restano coperti: nessuno vede l’insieme finché non si rivela alla fine.',
@@ -554,6 +604,16 @@ const it = {
   e_network: 'Connessione fallita. Riprova.'
 }
 const pt = {
+  e_not_empty: 'Essa partida já tem peças desenhadas.',
+  gDone: 'Revelada',
+  gMine: 'a tua',
+  gRemove: 'Tirar da lista',
+  gRemoveTitle: 'Tirar {c} da lista?',
+  gRemoveBody: 'A partida continua a existir: podes voltar a entrar com o código.',
+  gDelete: 'Apagar a partida',
+  gDeleteTitle: 'Apagar a partida {c}?',
+  gDeleteBody: 'Criaste-a tu e ainda não tem nenhuma peça. É apagada de vez.',
+
   install: 'Instalar no telemóvel',
   tut1T: 'Um desenho feito por muitas mãos',
   tut1: 'Cada pessoa pinta uma peça do tabuleiro. As peças terminadas ficam tapadas: ninguém vê o conjunto até ser revelado no final.',
@@ -703,6 +763,16 @@ const pt = {
   e_network: 'A ligação falhou. Tenta de novo.'
 }
 const de = {
+  e_not_empty: 'Diese Partie hat schon gemalte Felder.',
+  gDone: 'Enthüllt',
+  gMine: 'deins',
+  gRemove: 'Aus der Liste nehmen',
+  gRemoveTitle: '{c} aus der Liste nehmen?',
+  gRemoveBody: 'Die Partie bleibt bestehen: Mit dem Code kommst du wieder hinein.',
+  gDelete: 'Partie löschen',
+  gDeleteTitle: 'Partie {c} löschen?',
+  gDeleteBody: 'Du hast sie erstellt und sie hat noch kein Feld. Sie wird ganz gelöscht.',
+
   install: 'Auf dem Handy installieren',
   tut1T: 'Ein Bild aus vielen Händen',
   tut1: 'Jede Person malt ein Feld des Bretts. Fertige Felder bleiben verdeckt: Niemand sieht das Ganze, bis es am Ende enthüllt wird.',
@@ -852,6 +922,16 @@ const de = {
   e_network: 'Verbindung fehlgeschlagen. Versuch es noch einmal.'
 }
 const en = {
+  e_not_empty: 'That game already has tiles drawn.',
+  gDone: 'Revealed',
+  gMine: 'yours',
+  gRemove: 'Remove from the list',
+  gRemoveTitle: 'Remove {c} from the list?',
+  gRemoveBody: 'The game still exists: you can come back with the code.',
+  gDelete: 'Delete the game',
+  gDeleteTitle: 'Delete game {c}?',
+  gDeleteBody: 'You created it and it has no tiles yet. It will be deleted for good.',
+
   install: 'Install on your phone',
   tut1T: 'A drawing by many hands',
   tut1: 'Each person paints one tile of the board. Finished tiles stay covered: nobody sees the whole thing until it is revealed at the end.',

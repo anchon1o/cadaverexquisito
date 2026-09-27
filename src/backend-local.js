@@ -104,6 +104,23 @@ export function create() {
       if (!db.tiles.some(t => t.game_id === g && t.status === 'done')) return fail('invalid')
       doReveal(db, game); write(db); return { ok: true }
     },
+    async recent(codes) {
+      const db = read()
+      return db.games.filter(g => codes.includes(g.code)).map(g => {
+        const ts = db.tiles.filter(t => t.game_id === g.id)
+        return { code: g.code, size: g.board_size, goal: g.goal, status: g.status,
+          done: ts.filter(t => t.status === 'done').length, creator: g.creator === session,
+          mine: ts.some(t => t.session === session && (t.status === 'done' || t.draft)) }
+      })
+    },
+    async deleteGame(code) {
+      const db = read(), g = db.games.find(x => x.code === code)
+      if (!g) return { ok: true }
+      if (g.creator !== session) return fail('not_creator')
+      if (db.tiles.some(t => t.game_id === g.id && t.status === 'done')) return fail('not_empty')
+      db.games = db.games.filter(x => x.id !== g.id); db.tiles = db.tiles.filter(t => t.game_id !== g.id)
+      write(db); return { ok: true }
+    },
     async stats() { const db = read(); return { games: db.games.filter(g => g.status === 'playing').length, drawing: db.tiles.filter(t => C.isLive(t)).length } },
     unsubscribe() { notify = () => {} },
     subscribe(gameId, onTile, onGame) {

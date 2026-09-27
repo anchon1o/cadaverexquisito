@@ -306,6 +306,37 @@ language sql stable security definer set search_path = public as $$
     'drawing', (select count(*) from cx_tiles where status = 'editing' and lock_expires_at > now()))
 $$;
 
+-- Resumo das partidas que unha persoa ten apuntadas no seu navegador.
+-- Devolve o progreso de cada unha e se esa sesión a creou ou ten algo debuxado nela.
+create or replace function public.cx_recent(p_codes text[], p_session text) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'code', g.code, 'size', g.board_size, 'goal', g.goal, 'status', g.status,
+    'done', (select count(*) from cx_tiles t where t.game_id = g.id and t.status = 'done'),
+    'creator', exists (select 1 from cx_private_games pg where pg.game_id = g.id and pg.creator_session = p_session),
+    'mine', exists (select 1 from cx_tiles t join cx_private_tiles p on p.tile_id = t.id
+                    where t.game_id = g.id and p.editor_session = p_session and (t.status = 'done' or p.draft is not null))
+  )), '[]'::jsonb)
+  from cx_games g where g.code = any (p_codes)
+$$;
+
+-- Borrar unha partida enteira: só quen a creou, e só se aínda non ten ningunha peza rematada.
+create or replace function public.cx_delete_game(p_code text, p_session text) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare g cx_games%rowtype;
+begin
+  select * into g from cx_games where code = upper(p_code);
+  if not found then return jsonb_build_object('ok', true); end if;
+  if not exists (select 1 from cx_private_games where game_id = g.id and creator_session = p_session) then
+    return jsonb_build_object('ok', false, 'code', 'not_creator');
+  end if;
+  if exists (select 1 from cx_tiles where game_id = g.id and status = 'done') then
+    return jsonb_build_object('ok', false, 'code', 'not_empty');
+  end if;
+  delete from cx_games where id = g.id;   -- as pezas e os datos privados van detrás (on delete cascade)
+  return jsonb_build_object('ok', true);
+end $$;
+
 -- Permisos: as auxiliares non se poden chamar desde fóra.
 revoke execute on function public.cx_do_reveal(uuid) from public, anon, authenticated;
 revoke execute on function public.cx_touches_own(uuid,int,int,text) from public, anon, authenticated;
@@ -317,3 +348,5 @@ grant execute on function public.cx_finish_tile(uuid,int,int,text,text) to anon,
 grant execute on function public.cx_release_tile(uuid,int,int,text) to anon, authenticated;
 grant execute on function public.cx_reveal(uuid,text) to anon, authenticated;
 grant execute on function public.cx_stats() to anon, authenticated;
+grant execute on function public.cx_recent(text[],text) to anon, authenticated;
+grant execute on function public.cx_delete_game(text,text) to anon, authenticated;
