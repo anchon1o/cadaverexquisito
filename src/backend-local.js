@@ -123,6 +123,20 @@ export function create() {
       write(db); return { ok: true }
     },
     // Reto da semana en modo demo: mesmas regras, pero neste navegador.
+    async createInktober({ name, size, tileSize, prompt }) {
+      const res = await this.createGame({ title: '', name, size, goal: size * size, avoidOwn: true, tileSize, colors: 2 })
+      if (!res.ok) return res
+      const db = read(); const g = db.games.find(x => x.code === res.gameCode); g.prompt = prompt; write(db)
+      return res
+    },
+    async inktoberGallery(year) {
+      const db = read()
+      return db.games.filter(g => (g.prompt || '').startsWith(`ink-${year}-`))
+        .sort((a, b) => a.prompt < b.prompt ? 1 : -1)
+        .map(g => ({ code: g.code, prompt: g.prompt, size: g.board_size, tile: g.tile_size, status: g.status,
+          done: db.tiles.filter(t => t.game_id === g.id && t.status === 'done').length,
+          live: db.tiles.filter(t => t.game_id === g.id && C.isLive(t)).length }))
+    },
     async weekly() {
       const db = read(), now = new Date()
       const ws = new Date(now); ws.setHours(0, 0, 0, 0); ws.setDate(ws.getDate() - ((ws.getDay() + 6) % 7))
@@ -182,7 +196,7 @@ export function create() {
 // Garabato automático: prolonga cara a dentro cada trazo que asoma das veciñas e engade un par de trazos propios.
 function doodle(tiles, row, col) {
   const px = C.blank(), halo = C.buildHalo(tiles, row, col), rnd = n => (Math.random() * n) | 0
-  if (Math.random() < .5) px.fill(1 + rnd(7))
+  if (Math.random() < .5) px.fill(C.NCOLORS === 2 ? 1 : 1 + rnd(7))
   const walk = (x, y, tx, ty, color, size) => {
     for (let i = 0; i < C.TILE * 1.5 && (Math.abs(x - tx) > 1 || Math.abs(y - ty) > 1); i++) {
       const nx = Math.max(0, Math.min(C.TILE - 1, x + Math.sign(tx - x) + rnd(3) - 1)), ny = Math.max(0, Math.min(C.TILE - 1, y + Math.sign(ty - y) + rnd(3) - 1))

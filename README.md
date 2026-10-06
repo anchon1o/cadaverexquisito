@@ -12,6 +12,15 @@ Un único taboleiro para todo o mundo, sen código, que se crea só cando entra 
 - Revélase en canto se enche, e queda marcado como superado. Se o luns chega sen encherse, revélase igual, co que haxa, e queda como non superado.
 - Os retos pasados quedan na portada para velos.
 
+## Inktober
+
+Durante outubro, a caixa do reto semanal substitúese pola do Inktober, coa palabra oficial do día. Desde ela ábrese unha vista propia onde:
+
+- Créase un cadáver cunha palabra do Inktober: a do día ou calquera das anteriores. Tamaño e detalle libres; as cores son sempre branco e negro.
+- A galería do ano mostra todos os cadáveres de Inktober, agrupados por palabra, e calquera pode entrar a debuxar neles.
+
+As palabras están en `src/inktober.js` (lista oficial de inktober.substack.com, coa tradución propia aos oito idiomas). Para outro ano chega con engadir a lista nova.
+
 ## Como se xoga
 
 - O taboleiro medra por aneis desde o centro (1 → 9 → 25 → 49…). Salto de anel: se no anel aberto xa non queda ningunha casilla libre (todas ocupadas ou bloqueadas), pódese pasar ao seguinte, só un, e só nas casillas que xa tocan unha peza rematada.

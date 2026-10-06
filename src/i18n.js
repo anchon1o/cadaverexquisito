@@ -1,6 +1,14 @@
 import { local } from './store.js'
 
 const gl = {
+  inkDay: 'día {d}',
+  inkOpen: 'Ir ao Inktober',
+  inkBW: 'Branco e negro, tamaño e detalle libres.',
+  inkCreate: 'Novo cadáver de Inktober',
+  inkWord: 'Palabra',
+  inkGallery: 'Galería do Inktober',
+  inkEmpty: 'Aínda non hai ningún. Crea o primeiro!',
+
   weeklyDoneTip: 'Xa debuxaches a túa peza deste reto. Volve o luns que vén.',
   weeklyPassed: 'Superado',
   weeklyFailed: 'Non superado',
@@ -77,6 +85,14 @@ const gl = {
   e_not_creator: 'Só pode facelo quen creou a partida.', e_network: 'Fallou a conexión. Téntao de novo.'
 }
 const es = {
+  inkDay: 'día {d}',
+  inkOpen: 'Ir al Inktober',
+  inkBW: 'Blanco y negro, tamaño y detalle libres.',
+  inkCreate: 'Nuevo cadáver de Inktober',
+  inkWord: 'Palabra',
+  inkGallery: 'Galería del Inktober',
+  inkEmpty: 'Todavía no hay ninguno. ¡Crea el primero!',
+
   weeklyDoneTip: 'Ya dibujaste tu pieza de este reto. Vuelve el lunes que viene.',
   weeklyPassed: 'Superado',
   weeklyFailed: 'No superado',
@@ -153,6 +169,14 @@ const es = {
   e_not_creator: 'Solo puede hacerlo quien creó la partida.', e_network: 'Falló la conexión. Inténtalo de nuevo.'
 }
 const ca = {
+  inkDay: 'dia {d}',
+  inkOpen: 'Anar a l’Inktober',
+  inkBW: 'Blanc i negre, mida i detall lliures.',
+  inkCreate: 'Nou cadàver d’Inktober',
+  inkWord: 'Paraula',
+  inkGallery: 'Galeria de l’Inktober',
+  inkEmpty: 'Encara no n’hi ha cap. Crea el primer!',
+
   weeklyDoneTip: 'Ja has dibuixat la teva peça d’aquest repte. Torna dilluns vinent.',
   weeklyPassed: 'Superat',
   weeklyFailed: 'No superat',
@@ -325,6 +349,14 @@ const ca = {
   e_network: 'Ha fallat la connexió. Torna-ho a provar.'
 }
 const eu = {
+  inkDay: '{d}. eguna',
+  inkOpen: 'Joan Inktoberrera',
+  inkBW: 'Zuri-beltzean, tamaina eta xehetasun librez.',
+  inkCreate: 'Inktober gorpu berria',
+  inkWord: 'Hitza',
+  inkGallery: 'Inktober galeria',
+  inkEmpty: 'Oraindik ez dago bat ere. Sortu lehena!',
+
   weeklyDoneTip: 'Dagoeneko marraztu duzu erronka honetako zure pieza. Itzuli datorren astelehenean.',
   weeklyPassed: 'Gaindituta',
   weeklyFailed: 'Gainditu gabe',
@@ -497,6 +529,14 @@ const eu = {
   e_network: 'Konexioak huts egin du. Saiatu berriro.'
 }
 const it = {
+  inkDay: 'giorno {d}',
+  inkOpen: 'Vai all’Inktober',
+  inkBW: 'Bianco e nero, dimensione e dettaglio liberi.',
+  inkCreate: 'Nuovo cadavere Inktober',
+  inkWord: 'Parola',
+  inkGallery: 'Galleria Inktober',
+  inkEmpty: 'Non ce n’è ancora nessuno. Crea il primo!',
+
   weeklyDoneTip: 'Hai già disegnato il tuo tassello di questa sfida. Torna lunedì prossimo.',
   weeklyPassed: 'Superata',
   weeklyFailed: 'Non superata',
@@ -669,6 +709,14 @@ const it = {
   e_network: 'Connessione fallita. Riprova.'
 }
 const pt = {
+  inkDay: 'dia {d}',
+  inkOpen: 'Ir para o Inktober',
+  inkBW: 'Preto e branco, tamanho e detalhe livres.',
+  inkCreate: 'Novo cadáver de Inktober',
+  inkWord: 'Palavra',
+  inkGallery: 'Galeria do Inktober',
+  inkEmpty: 'Ainda não há nenhum. Cria o primeiro!',
+
   weeklyDoneTip: 'Já desenhaste a tua peça deste desafio. Volta na próxima segunda-feira.',
   weeklyPassed: 'Superado',
   weeklyFailed: 'Não superado',
@@ -841,6 +889,14 @@ const pt = {
   e_network: 'A ligação falhou. Tenta de novo.'
 }
 const de = {
+  inkDay: 'Tag {d}',
+  inkOpen: 'Zum Inktober',
+  inkBW: 'Schwarz-weiß, Größe und Detail frei.',
+  inkCreate: 'Neuer Inktober-Cadavre',
+  inkWord: 'Wort',
+  inkGallery: 'Inktober-Galerie',
+  inkEmpty: 'Noch keiner da. Erstelle den ersten!',
+
   weeklyDoneTip: 'Du hast dein Feld für diese Challenge schon gemalt. Komm nächsten Montag wieder.',
   weeklyPassed: 'Geschafft',
   weeklyFailed: 'Nicht geschafft',
@@ -1013,6 +1069,14 @@ const de = {
   e_network: 'Verbindung fehlgeschlagen. Versuch es noch einmal.'
 }
 const en = {
+  inkDay: 'day {d}',
+  inkOpen: 'Go to Inktober',
+  inkBW: 'Black and white, any size and detail.',
+  inkCreate: 'New Inktober corpse',
+  inkWord: 'Word',
+  inkGallery: 'Inktober gallery',
+  inkEmpty: 'None yet. Make the first one!',
+
   weeklyDoneTip: 'You already drew your tile for this challenge. Come back next Monday.',
   weeklyPassed: 'Completed',
   weeklyFailed: 'Not completed',

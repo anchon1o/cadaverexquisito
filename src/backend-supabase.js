@@ -42,6 +42,12 @@ export function create(url, key) {
     release: (g, r, c) => rpc('cadex_release_tile', at(g, r, c)),
     async recent(codes) { const { data } = await sb.rpc('cadex_recent', { p_codes: codes, p_session: session }); return data || [] },
     deleteGame: code => rpc('cadex_delete_game', { p_code: code, p_session: session }),
+    async createInktober({ name, size, tileSize, prompt }) {
+      const { data, error } = await sb.rpc('cadex_create_inktober', { p_creator: name, p_session: session, p_size: size, p_tile: tileSize, p_prompt: prompt })
+      if (error) return { ok: false, code: 'network', detail: error.message }
+      return data && data.ok ? { ok: true, gameCode: data.code } : (data || { ok: false, code: 'invalid' })
+    },
+    async inktoberGallery(year) { const { data } = await sb.rpc('cadex_inktober_gallery', { p_year: year }); return data || [] },
     async weekly() { const { data } = await sb.rpc('cadex_weekly', { p_session: session }); return data || null },
     async stats() { const { data } = await sb.rpc('cadex_stats'); return data || null },
     reveal: g => rpc('cadex_reveal', { p_game: g, p_session: session }),

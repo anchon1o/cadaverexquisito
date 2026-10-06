@@ -20,7 +20,8 @@ create table if not exists public.cadex_games (
   goal integer not null check (goal > 0),
   avoid_own boolean not null default true,
   tile_size integer not null default 40 check (tile_size in (40,80)),
-  colors integer not null default 32 check (colors in (32,64)),
+  colors integer not null default 32 check (colors in (2,32,64)),
+  prompt text,                 -- palabra de Inktober: 'ink-2026-06'; null nas demais
   week text unique,            -- 'IYYY-Www' no reto semanal; null nas partidas normais
   week_start date,
   status text not null default 'playing' check (status in ('playing','revealed')),
@@ -32,6 +33,8 @@ alter table public.cadex_games add column if not exists tile_size integer not nu
 alter table public.cadex_games add column if not exists colors integer not null default 32;
 alter table public.cadex_games add column if not exists week text;
 alter table public.cadex_games add column if not exists week_start date;
+alter table public.cadex_games add column if not exists prompt text;
+create index if not exists cadex_games_prompt_idx on public.cadex_games (prompt);
 create unique index if not exists cadex_games_week_idx on public.cadex_games (week);
 
 create table if not exists public.cadex_tiles (
@@ -99,7 +102,7 @@ end $$;
 -- (Postgres non admite repeticións grandes nunha expresión regular: por iso se comproba a lonxitude á parte.)
 create or replace function public.cadex_valid(p text, n int, c int) returns boolean language sql immutable as $$
   select p is not null and length(p) = n * n
-     and case when c = 64 then p !~ '[^0-9a-zA-Z_.-]' else p !~ '[^0-9a-v.]' end
+     and case when c = 64 then p !~ '[^0-9a-zA-Z_.-]' when c = 2 then p !~ '[^01.]' else p !~ '[^0-9a-v.]' end
 $$;
 
 -- Marco dunha peza de n×n con franxa e: conserva os e px exteriores e baleira o interior.
@@ -417,6 +420,45 @@ begin
                       from (select * from cadex_games where week is not null and week < wk order by week desc limit 8) x), '[]'::jsonb));
 end $$;
 
+-- INKTOBER
+-- Partidas cunha palabra do Inktober: tamaño e detalle libres, sempre en branco e negro.
+-- Son públicas na galería do Inktober; quen as crea pode revelalas e borralas como calquera outra.
+create or replace function public.cadex_create_inktober(
+  p_creator text, p_session text, p_size int, p_tile int, p_prompt text
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare gid uuid; new_code text; n int := coalesce(p_size, 5); m int;
+begin
+  if length(coalesce(p_session, '')) < 16 then return jsonb_build_object('ok', false, 'code', 'invalid'); end if;
+  if p_prompt is null or p_prompt !~ '^ink-[0-9]{4}-(0[1-9]|[12][0-9]|3[01])$' then
+    return jsonb_build_object('ok', false, 'code', 'invalid');
+  end if;
+  if n not in (3,5,7,9) then n := 5; end if;
+  m := (n - 1) / 2;
+  loop new_code := cadex_make_code(); exit when not exists (select 1 from cadex_games where code = new_code); end loop;
+
+  insert into cadex_games (code, title, creator_name, board_size, goal, avoid_own, tile_size, colors, prompt)
+  values (new_code, '', left(p_creator, 40), n, n * n, true, case when p_tile = 80 then 80 else 40 end, 2, p_prompt)
+  returning id into gid;
+  insert into cadex_private_games values (gid, p_session);
+
+  insert into cadex_tiles (game_id, row_no, col_no, ring_no)
+  select gid, rr, cc, greatest(abs(rr - m), abs(cc - m))
+  from generate_series(0, n - 1) rr, generate_series(0, n - 1) cc;
+  insert into cadex_private_tiles (tile_id, game_id) select id, gid from cadex_tiles where game_id = gid;
+  return jsonb_build_object('ok', true, 'code', new_code);
+end $$;
+
+-- Galería do Inktober dun ano: todas as partidas, coa palabra e o progreso.
+create or replace function public.cadex_inktober_gallery(p_year int) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'code', g.code, 'prompt', g.prompt, 'size', g.board_size, 'tile', g.tile_size, 'status', g.status,
+    'done', (select count(*) from cadex_tiles t where t.game_id = g.id and t.status = 'done'),
+    'live', (select count(*) from cadex_tiles t where t.game_id = g.id and t.status = 'editing' and t.lock_expires_at > now())
+  ) order by g.prompt desc, g.created_at desc), '[]'::jsonb)
+  from cadex_games g where g.prompt like 'ink-' || p_year || '-%'
+$$;
+
 -- Permisos: as auxiliares non se poden chamar desde fóra.
 revoke execute on function public.cadex_do_reveal(uuid) from public, anon, authenticated;
 revoke execute on function public.cadex_touches_own(uuid,int,int,text) from public, anon, authenticated;
@@ -431,3 +473,5 @@ grant execute on function public.cadex_stats() to anon, authenticated;
 grant execute on function public.cadex_recent(text[],text) to anon, authenticated;
 grant execute on function public.cadex_delete_game(text,text) to anon, authenticated;
 grant execute on function public.cadex_weekly(text) to anon, authenticated;
+grant execute on function public.cadex_create_inktober(text,text,int,int,text) to anon, authenticated;
+grant execute on function public.cadex_inktober_gallery(int) to anon, authenticated;

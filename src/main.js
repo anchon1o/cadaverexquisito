@@ -4,6 +4,7 @@ import { createBackend } from './backend.js'
 import { local } from './store.js'
 import { t, getLang, setLang, joinList, LANGS } from './i18n.js'
 import { themeFor } from './themes.js'
+import { INKTOBER, promptKey, parsePrompt, wordOf, inktoberToday } from './inktober.js'
 
 const app = document.querySelector('#app')
 const $ = (s, root = document) => root.querySelector(s)
@@ -50,6 +51,73 @@ const fail = res => { if (res?.detail) console.error(res.detail); toast(t('e_' +
 let installer = null
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installer = e; if ($('#name')) renderLobby('', '') })
 window.addEventListener('appinstalled', () => { installer = null })
+
+// ── Inktober ──────────────────────────────────────────────
+// En outubro substitúe ao reto semanal. Cada partida leva unha palabra do día, ten tamaño e
+// detalle libres e sempre vai en branco e negro. Todas quedan nunha galería pública do ano.
+const inkToday = inktoberToday()
+const ink = { day: inkToday ? inkToday.day : 1, size: 5, tile: 40, open: null, list: null }
+const inkWord = (key, lang = getLang()) => { const p = parsePrompt(key); return p ? wordOf(p.words, lang) : '' }
+
+function inkBox() {
+  const key = promptKey(inkToday.year, inkToday.day), p = parsePrompt(key)
+  return `<section class="weekly ink">
+    <div class="wtop"><span>Inktober ${inkToday.year}</span><span>${t('inkDay', { d: inkToday.day })}</span></div>
+    <h2>${esc(wordOf(p.words, getLang()))}</h2>
+    ${getLang() !== 'en' ? `<p class="inkorig">${esc(p.words.en)}</p>` : ''}
+    <div class="wfoot"><span class="wprog">${t('inkBW')}</span>
+      <button class="btn hint" id="igo">${t('inkOpen')}</button></div>
+  </section>`
+}
+
+async function renderInktober() {
+  const year = inkToday ? inkToday.year : Math.max(...Object.keys(INKTOBER).map(Number))
+  const words = INKTOBER[year], lastDay = inkToday ? inkToday.day : words.length
+  ink.day = Math.min(ink.day, lastDay)
+  const sel = promptKey(year, ink.day)
+  const groups = {}
+  for (const g of ink.list || []) (groups[g.prompt] = groups[g.prompt] || []).push(g)
+  app.innerHTML = `
+  <header class="bar"><button class="homebtn" id="home" aria-label="${t('menu')}">${logo}<span class="wordmark">Ink<br>tober</span></button></header>
+  <main class="stage inkview">
+    <section class="box">
+      <h2>${t('inkCreate')}</h2>
+      <label class="field"><span>${t('inkWord')}</span>
+        <select id="inkday">${words.slice(0, lastDay).map((w, i) => `<option value="${i + 1}" ${i + 1 === ink.day ? 'selected' : ''}>${i + 1} · ${esc(wordOf(w, getLang()))}</option>`).join('')}</select></label>
+      <div class="picks two">
+        ${inkPick('size', [3, 5, 7, 9], n => gridIcon(n), n => `${n}×${n}`)}
+        ${inkPick('tile', C.SIZES, n => detailIcon(n), n => t(n === 80 ? 'fine' : 'simple'))}
+      </div>
+      <p class="boxhint">${t('inkBW')}</p>
+      <button class="btn hint wide" id="inkcreate">${t('create')}</button>
+    </section>
+    <section class="inkgal">
+      <h2>${t('inkGallery')}</h2>
+      ${ink.list === null ? `<p class="tip">…</p>` : !ink.list.length ? `<p class="tip">${t('inkEmpty')}</p>` :
+        Object.keys(groups).sort().reverse().map(k => `<div class="inkday"><h3><b>${parsePrompt(k).day}</b> ${esc(inkWord(k))}</h3>
+          ${groups[k].map(g => `<button class="gamego inkgame" data-code="${esc(g.code)}">${gridIcon(g.size)}<b>${esc(g.code)}</b>
+            <small>${g.status === 'revealed' ? t('gDone') : `${g.done}/${g.size * g.size}${g.live ? ' · ✎' + g.live : ''}`}</small></button>`).join('')}</div>`).join('')}
+    </section>
+  </main><div id="sheet"></div>`
+  $('#home').onclick = () => renderLobby('', '')
+  $('#inkday').onchange = e => { ink.day = +e.target.value }
+  document.querySelectorAll('[data-iopen]').forEach(b => b.onclick = () => { ink.open = ink.open === b.dataset.iopen ? null : b.dataset.iopen; renderInktober() })
+  document.querySelectorAll('[data-ikey]').forEach(b => b.onclick = () => { ink[b.dataset.ikey] = +b.dataset.val; ink.open = null; renderInktober() })
+  document.querySelectorAll('.inkgame').forEach(b => b.onclick = () => enter(b.dataset.code))
+  $('#inkcreate').onclick = async () => {
+    $('#inkcreate').disabled = true
+    const res = await api.createInktober({ name: local.get('cx_name'), size: ink.size, tileSize: ink.tile, prompt: promptKey(year, ink.day) })
+    if (res.ok) { ink.list = null; return enter(res.gameCode) }
+    $('#inkcreate').disabled = false; fail(res)
+  }
+  if (ink.list === null) { ink.list = await api.inktoberGallery(year).catch(() => []); renderInktober() }
+}
+// Selector despregable do Inktober (mesmo aspecto que os de crear partida).
+const inkPick = (key, values, ico, label) => `<div class="pick ${ink.open === key ? 'open' : ''}">
+  <small>${t(key === 'size' ? 'sizeL' : 'detail')}</small>
+  <button class="pickbtn" data-iopen="${key}" aria-expanded="${ink.open === key}">${ico(ink[key])}<span>${label(ink[key])}</span><i class="caret"></i></button>
+  ${ink.open === key ? `<div class="menu">${values.map(v => `<button class="opt ${ink[key] === v ? 'on' : ''}" data-ikey="${key}" data-val="${v}">${ico(v)}<span>${label(v)}</span></button>`).join('')}</div>` : ''}
+</div>`
 
 // ── Reto da semana ────────────────────────────────────────
 let weekly = null
@@ -145,13 +213,13 @@ function renderLobby(message = '', mode = urlCode() ? 'join' : '') {
     ${mode === 'join' ? `<section class="box"><div class="row">
       <input id="code" maxlength="6" autocapitalize="characters" autocomplete="off" spellcheck="false" aria-label="${t('codePh')}" placeholder="${t('codePh')}" value="${esc(urlCode())}">
       <button class="btn primary" id="join">${t('join')}</button></div></section>` : ''}
-    ${weeklyBox()}
+    ${inkToday ? inkBox() : weeklyBox()}
     ${games.length ? `<section class="mine" id="mine"><h2>${t('myGames')}</h2>${games.map(g => gameRow(g)).join('')}</section>` : ''}
     <p class="stats" id="stats"></p>
     ${installer ? `<button class="btn small wide" id="install">${t('install')}</button>` : ''}
     ${api.demo ? `<p class="note">${t('demoNote')}</p>` : ''}
   </main><div id="sheet"></div>`
-  if (api.weekly && !weekly) api.weekly().then(w => { if (w) { weekly = w; renderLobby('', mode) } }).catch(() => {})
+  if (!inkToday && api.weekly && !weekly) api.weekly().then(w => { if (w) { weekly = w; renderLobby('', mode) } }).catch(() => {})
   api.stats().then(st => { const el = $('#stats'); if (el && st && st.games) el.innerHTML = `<i></i>${t(st.games === 1 ? 'stats1' : 'statsN', { g: st.games })}${st.drawing ? ' ' + t(st.drawing === 1 ? 'drawing1' : 'drawingN', { d: st.drawing }) : ''}` }).catch(() => {})
   if ($('#install')) $('#install').onclick = async () => { const p = installer; installer = null; renderLobby('', mode); p.prompt(); await p.userChoice }
   const keepName = () => local.set('cx_name', $('#name').value.trim())
@@ -162,6 +230,7 @@ function renderLobby(message = '', mode = urlCode() ? 'join' : '') {
   $('#mCreate').onclick = () => { keepName(); pick.open = null; renderLobby('', mode === 'create' ? '' : 'create') }
   $('#mJoin').onclick = () => { keepName(); renderLobby('', mode === 'join' ? '' : 'join'); $('#code')?.focus() }
   document.querySelectorAll('[data-code]').forEach(b => b.onclick = () => { if (name()) enter(b.dataset.code) })
+  if ($('#igo')) $('#igo').onclick = () => { if (name()) renderInktober() }
   if ($('#wgo')) $('#wgo').onclick = () => { if (name()) enter(weekly.code) }
   document.querySelectorAll('[data-drop]').forEach(b => b.onclick = () => dropGame(b.dataset.drop, mode))
   if (games.length && games.some(g => !gamesInfo[g.code])) loadRecent(mode)
@@ -258,8 +327,8 @@ async function enter(code) {
   if (!game) { forget(code); return renderLobby(t('notFound'), 'join') }
   if (!local.get('cx_name')) return renderLobby(t('needName'))
   try { history.replaceState(null, '', `?game=${code}`) } catch {}   // falla en marcos illados; non é grave
-  S.game = game; if (!game.week) remember(game)
-  C.configure(game.tile_size, game.colors); S.color = C.NCOLORS === 64 ? 56 : 24; S.brush = 2
+  S.game = game; S.lastPrompt = game.prompt || null; if (!game.week && !game.prompt) remember(game)
+  C.configure(game.tile_size, game.colors); S.color = C.NCOLORS === 64 ? 56 : C.NCOLORS === 2 ? 0 : 24; S.brush = 2
   await refreshAll()
   api.subscribe(game.id, onTileEvent, onGameEvent)
   renderGame()
@@ -288,6 +357,8 @@ function leaveGame() {
   flushDraft(); api.unsubscribe()
   Object.assign(S, { game: null, tiles: [], creator: false, mine: null, work: null, myDone: new Map(), editorOpen: false, showAuthors: false, needFull: false, hadOpen: null })
   try { history.replaceState(null, '', location.pathname) } catch {}
+  const wasInk = S.lastPrompt; S.lastPrompt = null
+  if (wasInk) { ink.list = null; return renderInktober() }
   renderLobby('', '')
 }
 async function refreshAll() {
@@ -327,6 +398,7 @@ function renderGame() {
     <div class="barbtns"><button class="btn small" id="helpG" aria-label="${t('options')}">?</button><button class="btn small" id="share">${t('share')}</button></div>
   </header>
   <main class="stage ${revealed ? 'is-revealed' : ''}">
+    ${S.game.prompt ? `<div class="coderow weekrow"><span>Inktober · ${parsePrompt(S.game.prompt)?.day || ''}</span><b>${esc(inkWord(S.game.prompt))}</b></div>` : ''}
     ${S.game.week ? `<div class="coderow weekrow"><span>${t('weekly')}${S.game.status === 'revealed' ? ' · ' + t(C.doneCount(S.tiles) >= S.game.board_size ** 2 ? 'weeklyPassed' : 'weeklyFailed') : ''}</span><b>${esc((themeFor(weekMonday(S.game.week_start), getLang()) || {}).name || '')}</b></div>`
       : `<div class="coderow"><span>${t('codePh')}</span><button class="codechip" id="codechip" aria-label="${t('codePh')} ${S.game.code}">${[...S.game.code].map(c => `<i>${c}</i>`).join('')}</button></div>`}
     <div class="status" id="status"></div>
@@ -562,8 +634,8 @@ function openEditor() {
         </div>
         <div class="toolrow" id="sizes" aria-label="${t('brush')}">${C.BRUSHES.map(s => `<button class="tool size" data-size="${s}" aria-label="${t('brush')} ${s}"><i style="--s:${s}"></i></button>`).join('')}</div>
         <div class="palwrap">
-          <div class="palette ${C.NCOLORS === 64 ? 'p64' : ''} ${S.palOpen ? 'open' : ''}" id="palette">${C.COLORS.map((c, i) => `<button class="sw" data-color="${i}" style="background:${c}" aria-label="${c}"></button>`).join('')}</div>
-          <div class="palbar"><div class="recent" id="recent"></div>
+          <div class="palette ${C.NCOLORS === 64 ? 'p64' : C.NCOLORS === 2 ? 'p2 open' : ''} ${S.palOpen ? 'open' : ''}" id="palette">${C.COLORS.map((c, i) => `<button class="sw" data-color="${i}" style="background:${c}" aria-label="${c}"></button>`).join('')}</div>
+          <div class="palbar" ${C.NCOLORS === 2 ? 'hidden' : ''}><div class="recent" id="recent"></div>
             <button class="tool palmore" id="palMore" aria-expanded="${S.palOpen}" aria-label="${t('morecolors')}"><i class="caret"></i></button></div>
         </div>
 

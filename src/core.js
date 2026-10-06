@@ -36,13 +36,16 @@ export const BASE64 = (() => {
   return out
 })()
 
+// Inktober: tinta negra sobre papel branco (o branco serve tamén para tapar).
+export const BW = ['#111111', '#FFFFFF']
+
 export function configure(size = 40, colors = 32) {
   TILE = SIZES.includes(size) ? size : 40
   EDGE = TILE === 80 ? 6 : 4
   VIEW = TILE + EDGE * 2
   MIN_PAINTED = TILE
-  NCOLORS = PALETTES.includes(colors) ? colors : 32
-  COLORS = NCOLORS === 64 ? BASE64 : BASE32
+  NCOLORS = colors === 2 || PALETTES.includes(colors) ? colors : 32
+  COLORS = NCOLORS === 64 ? BASE64 : NCOLORS === 2 ? BW : BASE32
   BRUSHES = TILE === 80 ? [1, 2, 3, 4, 6, 8] : [1, 2, 4, 6]
 }
 configure()
