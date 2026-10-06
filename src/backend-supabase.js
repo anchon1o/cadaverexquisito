@@ -42,6 +42,7 @@ export function create(url, key) {
     release: (g, r, c) => rpc('cadex_release_tile', at(g, r, c)),
     async recent(codes) { const { data } = await sb.rpc('cadex_recent', { p_codes: codes, p_session: session }); return data || [] },
     deleteGame: code => rpc('cadex_delete_game', { p_code: code, p_session: session }),
+    async weekly() { const { data } = await sb.rpc('cadex_weekly', { p_session: session }); return data || null },
     async stats() { const { data } = await sb.rpc('cadex_stats'); return data || null },
     reveal: g => rpc('cadex_reveal', { p_game: g, p_session: session }),
 

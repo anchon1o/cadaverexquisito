@@ -1,6 +1,19 @@
 import { local } from './store.js'
 
 const gl = {
+  weeklyDoneTip: 'Xa debuxaches a túa peza deste reto. Volve o luns que vén.',
+  weeklyPassed: 'Superado',
+  weeklyFailed: 'Non superado',
+  weeklyPlayed: 'xa debuxaches',
+  weeklyView: 'Ver o taboleiro',
+  e_weekly_once: 'No reto da semana só se debuxa unha peza por persoa.',
+
+  weekly: 'Reto da semana',
+  weeklyDraw: 'Debuxar',
+  weeklySee: 'Ver o debuxo',
+  weeklyOver: 'Rematado',
+  weeklyFree: 'Tema libre',
+
   e_not_empty: 'Esa partida xa ten pezas debuxadas.',
   gDone: 'Revelada',
   gMine: 'a túa',
@@ -64,6 +77,19 @@ const gl = {
   e_not_creator: 'Só pode facelo quen creou a partida.', e_network: 'Fallou a conexión. Téntao de novo.'
 }
 const es = {
+  weeklyDoneTip: 'Ya dibujaste tu pieza de este reto. Vuelve el lunes que viene.',
+  weeklyPassed: 'Superado',
+  weeklyFailed: 'No superado',
+  weeklyPlayed: 'ya dibujaste',
+  weeklyView: 'Ver el tablero',
+  e_weekly_once: 'En el reto de la semana solo se dibuja una pieza por persona.',
+
+  weekly: 'Reto de la semana',
+  weeklyDraw: 'Dibujar',
+  weeklySee: 'Ver el dibujo',
+  weeklyOver: 'Terminado',
+  weeklyFree: 'Tema libre',
+
   e_not_empty: 'Esa partida ya tiene piezas dibujadas.',
   gDone: 'Revelada',
   gMine: 'la tuya',
@@ -127,6 +153,19 @@ const es = {
   e_not_creator: 'Solo puede hacerlo quien creó la partida.', e_network: 'Falló la conexión. Inténtalo de nuevo.'
 }
 const ca = {
+  weeklyDoneTip: 'Ja has dibuixat la teva peça d’aquest repte. Torna dilluns vinent.',
+  weeklyPassed: 'Superat',
+  weeklyFailed: 'No superat',
+  weeklyPlayed: 'ja hi has dibuixat',
+  weeklyView: 'Veure el tauler',
+  e_weekly_once: 'Al repte de la setmana només es dibuixa una peça per persona.',
+
+  weekly: 'Repte de la setmana',
+  weeklyDraw: 'Dibuixar',
+  weeklySee: 'Veure el dibuix',
+  weeklyOver: 'Acabat',
+  weeklyFree: 'Tema lliure',
+
   e_not_empty: 'Aquesta partida ja té peces dibuixades.',
   gDone: 'Revelada',
   gMine: 'la teva',
@@ -286,6 +325,19 @@ const ca = {
   e_network: 'Ha fallat la connexió. Torna-ho a provar.'
 }
 const eu = {
+  weeklyDoneTip: 'Dagoeneko marraztu duzu erronka honetako zure pieza. Itzuli datorren astelehenean.',
+  weeklyPassed: 'Gaindituta',
+  weeklyFailed: 'Gainditu gabe',
+  weeklyPlayed: 'dagoeneko marraztu duzu',
+  weeklyView: 'Ikusi taula',
+  e_weekly_once: 'Asteko erronkan pertsona bakoitzak pieza bakarra marrazten du.',
+
+  weekly: 'Asteko erronka',
+  weeklyDraw: 'Marraztu',
+  weeklySee: 'Ikusi marrazkia',
+  weeklyOver: 'Amaituta',
+  weeklyFree: 'Gai librea',
+
   e_not_empty: 'Partida horrek baditu marraztutako piezak.',
   gDone: 'Agerian',
   gMine: 'zurea',
@@ -445,6 +497,19 @@ const eu = {
   e_network: 'Konexioak huts egin du. Saiatu berriro.'
 }
 const it = {
+  weeklyDoneTip: 'Hai già disegnato il tuo tassello di questa sfida. Torna lunedì prossimo.',
+  weeklyPassed: 'Superata',
+  weeklyFailed: 'Non superata',
+  weeklyPlayed: 'hai già disegnato',
+  weeklyView: 'Vedi il tabellone',
+  e_weekly_once: 'Nella sfida della settimana si disegna un solo tassello a testa.',
+
+  weekly: 'Sfida della settimana',
+  weeklyDraw: 'Disegna',
+  weeklySee: 'Vedi il disegno',
+  weeklyOver: 'Completata',
+  weeklyFree: 'Tema libero',
+
   e_not_empty: 'Quella partita ha già dei tasselli disegnati.',
   gDone: 'Rivelata',
   gMine: 'il tuo',
@@ -604,6 +669,19 @@ const it = {
   e_network: 'Connessione fallita. Riprova.'
 }
 const pt = {
+  weeklyDoneTip: 'Já desenhaste a tua peça deste desafio. Volta na próxima segunda-feira.',
+  weeklyPassed: 'Superado',
+  weeklyFailed: 'Não superado',
+  weeklyPlayed: 'já desenhaste',
+  weeklyView: 'Ver o tabuleiro',
+  e_weekly_once: 'No desafio da semana só se desenha uma peça por pessoa.',
+
+  weekly: 'Desafio da semana',
+  weeklyDraw: 'Desenhar',
+  weeklySee: 'Ver o desenho',
+  weeklyOver: 'Terminado',
+  weeklyFree: 'Tema livre',
+
   e_not_empty: 'Essa partida já tem peças desenhadas.',
   gDone: 'Revelada',
   gMine: 'a tua',
@@ -763,6 +841,19 @@ const pt = {
   e_network: 'A ligação falhou. Tenta de novo.'
 }
 const de = {
+  weeklyDoneTip: 'Du hast dein Feld für diese Challenge schon gemalt. Komm nächsten Montag wieder.',
+  weeklyPassed: 'Geschafft',
+  weeklyFailed: 'Nicht geschafft',
+  weeklyPlayed: 'schon gemalt',
+  weeklyView: 'Brett ansehen',
+  e_weekly_once: 'Bei der Wochen-Challenge malt jede Person nur ein Feld.',
+
+  weekly: 'Wochen-Challenge',
+  weeklyDraw: 'Malen',
+  weeklySee: 'Bild ansehen',
+  weeklyOver: 'Fertig',
+  weeklyFree: 'Freies Thema',
+
   e_not_empty: 'Diese Partie hat schon gemalte Felder.',
   gDone: 'Enthüllt',
   gMine: 'deins',
@@ -922,6 +1013,19 @@ const de = {
   e_network: 'Verbindung fehlgeschlagen. Versuch es noch einmal.'
 }
 const en = {
+  weeklyDoneTip: 'You already drew your tile for this challenge. Come back next Monday.',
+  weeklyPassed: 'Completed',
+  weeklyFailed: 'Not completed',
+  weeklyPlayed: 'you already drew',
+  weeklyView: 'See the board',
+  e_weekly_once: 'In the weekly challenge each person draws one tile only.',
+
+  weekly: 'Weekly challenge',
+  weeklyDraw: 'Draw',
+  weeklySee: 'See the drawing',
+  weeklyOver: 'Finished',
+  weeklyFree: 'Free theme',
+
   e_not_empty: 'That game already has tiles drawn.',
   gDone: 'Revealed',
   gMine: 'yours',

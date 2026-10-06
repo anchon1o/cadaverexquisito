@@ -3,6 +3,7 @@ import * as C from './core.js'
 import { createBackend } from './backend.js'
 import { local } from './store.js'
 import { t, getLang, setLang, joinList, LANGS } from './i18n.js'
+import { themeFor } from './themes.js'
 
 const app = document.querySelector('#app')
 const $ = (s, root = document) => root.querySelector(s)
@@ -49,6 +50,37 @@ const fail = res => { if (res?.detail) console.error(res.detail); toast(t('e_' +
 let installer = null
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installer = e; if ($('#name')) renderLobby('', '') })
 window.addEventListener('appinstalled', () => { installer = null })
+
+// ── Reto da semana ────────────────────────────────────────
+let weekly = null
+const weekMonday = w => new Date((w && /^\d{4}-\d{2}-\d{2}$/.test(w) ? w : new Date().toISOString().slice(0, 10)) + 'T00:00:00')
+const weekRange = monday => {
+  const sun = new Date(monday.getTime()); sun.setDate(sun.getDate() + 6)
+  const f = new Intl.DateTimeFormat(getLang(), { day: 'numeric', month: 'short' })
+  return `${f.format(monday)} – ${f.format(sun)}`
+}
+function weeklyBox() {
+  if (!weekly) return ''
+  const monday = weekMonday(weekly.week_start)
+  const theme = themeFor(monday, getLang())
+  const total = weekly.size * weekly.size
+  const over = weekly.status === 'revealed'
+  const passed = weekly.done >= total
+  return `<section class="weekly ${over ? 'over' : ''}">
+    <div class="wtop"><span>${t('weekly')}</span><span>${esc(weekRange(monday))}</span></div>
+    <h2>${esc(theme ? theme.name : t('weeklyFree'))}</h2>
+    <div class="wfoot">
+      <span class="wprog">${over ? `<b class="${passed ? 'ok' : 'ko'}">${t(passed ? 'weeklyPassed' : 'weeklyFailed')}</b> ${weekly.done}/${total}`
+        : `${weekly.done}/${total}${weekly.played ? ' · ' + t('weeklyPlayed') : weekly.mine ? ' · ' + t('gMine') : ''}`}</span>
+      <button class="btn ${over || weekly.played ? '' : 'hint'}" id="wgo">${t(over ? 'weeklySee' : weekly.played ? 'weeklyView' : 'weeklyDraw')}</button>
+    </div>
+    ${weekly.past.length ? `<div class="wpast">${weekly.past.map(p => {
+      const th = themeFor(weekMonday(p.week_start), getLang())
+      const ok = p.done >= p.size * p.size
+      return `<button class="wpastbtn ${ok ? 'ok' : 'ko'}" data-code="${esc(p.code)}" title="${p.done}/${p.size * p.size}">${ok ? '✓' : '×'} ${esc(th ? th.name : p.week)}</button>`
+    }).join('')}</div>` : ''}
+  </section>`
+}
 
 const recent = () => { try { return JSON.parse(local.get('cx_recent')) || [] } catch { return [] } }
 const remember = g => local.set('cx_recent', JSON.stringify([{ code: g.code, size: g.board_size }, ...recent().filter(r => r.code !== g.code)].slice(0, 12)))
@@ -113,11 +145,13 @@ function renderLobby(message = '', mode = urlCode() ? 'join' : '') {
     ${mode === 'join' ? `<section class="box"><div class="row">
       <input id="code" maxlength="6" autocapitalize="characters" autocomplete="off" spellcheck="false" aria-label="${t('codePh')}" placeholder="${t('codePh')}" value="${esc(urlCode())}">
       <button class="btn primary" id="join">${t('join')}</button></div></section>` : ''}
+    ${weeklyBox()}
     ${games.length ? `<section class="mine" id="mine"><h2>${t('myGames')}</h2>${games.map(g => gameRow(g)).join('')}</section>` : ''}
     <p class="stats" id="stats"></p>
     ${installer ? `<button class="btn small wide" id="install">${t('install')}</button>` : ''}
     ${api.demo ? `<p class="note">${t('demoNote')}</p>` : ''}
   </main><div id="sheet"></div>`
+  if (api.weekly && !weekly) api.weekly().then(w => { if (w) { weekly = w; renderLobby('', mode) } }).catch(() => {})
   api.stats().then(st => { const el = $('#stats'); if (el && st && st.games) el.innerHTML = `<i></i>${t(st.games === 1 ? 'stats1' : 'statsN', { g: st.games })}${st.drawing ? ' ' + t(st.drawing === 1 ? 'drawing1' : 'drawingN', { d: st.drawing }) : ''}` }).catch(() => {})
   if ($('#install')) $('#install').onclick = async () => { const p = installer; installer = null; renderLobby('', mode); p.prompt(); await p.userChoice }
   const keepName = () => local.set('cx_name', $('#name').value.trim())
@@ -128,6 +162,7 @@ function renderLobby(message = '', mode = urlCode() ? 'join' : '') {
   $('#mCreate').onclick = () => { keepName(); pick.open = null; renderLobby('', mode === 'create' ? '' : 'create') }
   $('#mJoin').onclick = () => { keepName(); renderLobby('', mode === 'join' ? '' : 'join'); $('#code')?.focus() }
   document.querySelectorAll('[data-code]').forEach(b => b.onclick = () => { if (name()) enter(b.dataset.code) })
+  if ($('#wgo')) $('#wgo').onclick = () => { if (name()) enter(weekly.code) }
   document.querySelectorAll('[data-drop]').forEach(b => b.onclick = () => dropGame(b.dataset.drop, mode))
   if (games.length && games.some(g => !gamesInfo[g.code])) loadRecent(mode)
   if ($('#code')) {
@@ -223,7 +258,7 @@ async function enter(code) {
   if (!game) { forget(code); return renderLobby(t('notFound'), 'join') }
   if (!local.get('cx_name')) return renderLobby(t('needName'))
   try { history.replaceState(null, '', `?game=${code}`) } catch {}   // falla en marcos illados; non é grave
-  S.game = game; remember(game)
+  S.game = game; if (!game.week) remember(game)
   C.configure(game.tile_size, game.colors); S.color = C.NCOLORS === 64 ? 56 : 24; S.brush = 2
   await refreshAll()
   api.subscribe(game.id, onTileEvent, onGameEvent)
@@ -248,7 +283,7 @@ function ping() {
 }
 
 function leaveGame() {
-  clearInfo()
+  clearInfo(); weekly = null
   if (S.stroke) strokeEnd()
   flushDraft(); api.unsubscribe()
   Object.assign(S, { game: null, tiles: [], creator: false, mine: null, work: null, myDone: new Map(), editorOpen: false, showAuthors: false, needFull: false, hadOpen: null })
@@ -292,7 +327,8 @@ function renderGame() {
     <div class="barbtns"><button class="btn small" id="helpG" aria-label="${t('options')}">?</button><button class="btn small" id="share">${t('share')}</button></div>
   </header>
   <main class="stage ${revealed ? 'is-revealed' : ''}">
-    <div class="coderow"><span>${t('codePh')}</span><button class="codechip" id="codechip" aria-label="${t('codePh')} ${S.game.code}">${[...S.game.code].map(c => `<i>${c}</i>`).join('')}</button></div>
+    ${S.game.week ? `<div class="coderow weekrow"><span>${t('weekly')}${S.game.status === 'revealed' ? ' · ' + t(C.doneCount(S.tiles) >= S.game.board_size ** 2 ? 'weeklyPassed' : 'weeklyFailed') : ''}</span><b>${esc((themeFor(weekMonday(S.game.week_start), getLang()) || {}).name || '')}</b></div>`
+      : `<div class="coderow"><span>${t('codePh')}</span><button class="codechip" id="codechip" aria-label="${t('codePh')} ${S.game.code}">${[...S.game.code].map(c => `<i>${c}</i>`).join('')}</button></div>`}
     <div class="status" id="status"></div>
     <div class="board" id="board" style="--n:${S.game.board_size}"></div>
     <div id="under"></div>
@@ -302,7 +338,7 @@ function renderGame() {
   $('#share').onclick = share
   $('#helpG').onclick = () => showHelp(0)
   $('#home').onclick = leaveGame
-  $('#codechip').onclick = async () => { try { await navigator.clipboard.writeText(S.game.code); toast(t('codeCopied')) } catch { toast(S.game.code) } }
+  if ($('#codechip')) $('#codechip').onclick = async () => { try { await navigator.clipboard.writeText(S.game.code); toast(t('codeCopied')) } catch { toast(S.game.code) } }
   paintGame(true)
 }
 
@@ -354,7 +390,7 @@ function paintGame(first = false) {
     <p><b>${t('progress', { d: done, g: S.game.goal })}</b><span>${ring === 0 ? t('ringCenter') : t('ring', { r: ring, n: rings })}</span></p>`
   $('#under').innerHTML = `
     ${S.mine ? `<button class="btn hint wide" id="cont">${t('continueMine', { t: C.tileName(S.mine.row, S.mine.col) })}</button>`
-      : `<p class="tip">${t(anyOpen ? 'hintPick' : 'hintNone')}</p>`}
+      : `<p class="tip">${S.game.week && S.myDone.size ? t('weeklyDoneTip') : t(anyOpen ? 'hintPick' : 'hintNone')}</p>`}
     <ul class="legend"><li><i class="k s-open"></i>${t('lgOpen')}</li><li><i class="k s-live"></i>${t('lgLive')}</li>
       <li><i class="k s-blocked"></i>${t('lgBlocked')}</li><li><i class="k s-done"></i>${t('lgDone')}</li></ul>
     <div class="actions">

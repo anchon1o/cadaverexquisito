@@ -21,6 +21,8 @@ create table if not exists public.cadex_games (
   avoid_own boolean not null default true,
   tile_size integer not null default 40 check (tile_size in (40,80)),
   colors integer not null default 32 check (colors in (32,64)),
+  week text unique,            -- 'IYYY-Www' no reto semanal; null nas partidas normais
+  week_start date,
   status text not null default 'playing' check (status in ('playing','revealed')),
   revealed_at timestamptz,
   created_at timestamptz not null default now()
@@ -28,6 +30,9 @@ create table if not exists public.cadex_games (
 
 alter table public.cadex_games add column if not exists tile_size integer not null default 40;
 alter table public.cadex_games add column if not exists colors integer not null default 32;
+alter table public.cadex_games add column if not exists week text;
+alter table public.cadex_games add column if not exists week_start date;
+create unique index if not exists cadex_games_week_idx on public.cadex_games (week);
 
 create table if not exists public.cadex_tiles (
   id uuid primary key default gen_random_uuid(),
@@ -171,6 +176,13 @@ begin
   if exists (select 1 from cadex_tiles t join cadex_private_tiles p on p.tile_id = t.id
              where t.game_id = p_game and t.status = 'editing' and p.editor_session = p_session) then
     return jsonb_build_object('ok', false, 'code', 'busy');
+  end if;
+
+  -- No reto da semana cada persoa debuxa unha soa peza
+  if g.week is not null and exists (
+       select 1 from cadex_tiles t join cadex_private_tiles p on p.tile_id = t.id
+       where t.game_id = p_game and t.status = 'done' and p.editor_session = p_session) then
+    return jsonb_build_object('ok', false, 'code', 'weekly_once');
   end if;
 
   select * into target from cadex_tiles where game_id = p_game and row_no = p_row and col_no = p_col for update;
@@ -337,6 +349,74 @@ begin
   return jsonb_build_object('ok', true);
 end $$;
 
+-- RETO DA SEMANA
+-- Un único taboleiro para todo o mundo, que se crea só ao entrar a primeira persoa da semana.
+-- O tamaño adáptase ao que pasou a semana anterior: se se rematou antes do sábado, sobe un chanzo;
+-- se quedou sen rematar, baixa un. Ao abrir a semana nova, a anterior revélase tal como quedase.
+create or replace function public.cadex_weekly(p_session text) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  wk text := to_char(now() at time zone 'UTC', 'IYYY"-W"IW');
+  ws date := (date_trunc('week', now() at time zone 'UTC'))::date;
+  g cadex_games%rowtype;
+  prev cadex_games%rowtype;
+  c text;
+  sizes constant int[] := array[3,5,7,9];
+  n int := 5;
+  pos int;
+  total int;
+  finished int;
+  last_done timestamptz;
+begin
+  select * into g from cadex_games where week = wk;
+
+  if g.id is null then
+    perform pg_advisory_xact_lock(hashtext('cadex_weekly'));
+    select * into g from cadex_games where week = wk;
+  end if;
+
+  if g.id is null then
+    select * into prev from cadex_games where week is not null and week < wk order by week desc limit 1;
+    if prev.id is not null then
+      total := prev.board_size * prev.board_size;
+      select count(*), max(finished_at) into finished, last_done from cadex_tiles
+        where game_id = prev.id and status = 'done';
+      pos := coalesce(array_position(sizes, prev.board_size), 2);
+      if finished >= total then
+        -- rematado: se foi antes do sábado, o seguinte é máis grande
+        if last_done < (prev.week_start + 5)::timestamptz then pos := least(pos + 1, array_length(sizes, 1)); end if;
+      else
+        pos := greatest(pos - 1, 1);
+      end if;
+      n := sizes[pos];
+      if prev.status = 'playing' then perform cadex_do_reveal(prev.id); end if;
+    end if;
+
+    loop c := cadex_make_code(); exit when not exists (select 1 from cadex_games where code = c); end loop;
+    insert into cadex_games (code, title, creator_name, board_size, goal, avoid_own, tile_size, colors, week, week_start)
+    values (c, '', null, n, n * n, true, 40, 32, wk, ws)
+    returning * into g;
+
+    insert into cadex_tiles (game_id, row_no, col_no, ring_no)
+    select g.id, r, c, greatest(abs(r - (n - 1) / 2), abs(c - (n - 1) / 2))
+    from generate_series(0, n - 1) r, generate_series(0, n - 1) c;
+    insert into cadex_private_tiles (tile_id, game_id) select id, g.id from cadex_tiles where game_id = g.id;
+  end if;
+
+  return jsonb_build_object(
+    'code', g.code, 'week', g.week, 'week_start', g.week_start, 'size', g.board_size,
+    'status', g.status,
+    'done', (select count(*) from cadex_tiles t where t.game_id = g.id and t.status = 'done'),
+    'mine', exists (select 1 from cadex_tiles t join cadex_private_tiles p on p.tile_id = t.id
+                    where t.game_id = g.id and p.editor_session = p_session and (t.status = 'done' or p.draft is not null)),
+    'played', exists (select 1 from cadex_tiles t join cadex_private_tiles p on p.tile_id = t.id
+                      where t.game_id = g.id and t.status = 'done' and p.editor_session = p_session),
+    'past', coalesce((select jsonb_agg(jsonb_build_object('code', x.code, 'week', x.week, 'week_start', x.week_start,
+                        'size', x.board_size, 'status', x.status,
+                        'done', (select count(*) from cadex_tiles t where t.game_id = x.id and t.status = 'done')) order by x.week desc)
+                      from (select * from cadex_games where week is not null and week < wk order by week desc limit 8) x), '[]'::jsonb));
+end $$;
+
 -- Permisos: as auxiliares non se poden chamar desde fóra.
 revoke execute on function public.cadex_do_reveal(uuid) from public, anon, authenticated;
 revoke execute on function public.cadex_touches_own(uuid,int,int,text) from public, anon, authenticated;
@@ -350,3 +430,4 @@ grant execute on function public.cadex_reveal(uuid,text) to anon, authenticated;
 grant execute on function public.cadex_stats() to anon, authenticated;
 grant execute on function public.cadex_recent(text[],text) to anon, authenticated;
 grant execute on function public.cadex_delete_game(text,text) to anon, authenticated;
+grant execute on function public.cadex_weekly(text) to anon, authenticated;

@@ -2,6 +2,16 @@
 
 Un debuxo entre moitas mans. Cada persoa pinta unha peza de **40×40 px** vendo só os **4 px** que asoman das pezas veciñas. O conxunto queda oculto ata que se revela.
 
+## Reto da semana
+
+Un único taboleiro para todo o mundo, sen código, que se crea só cando entra a primeira persoa da semana (semana ISO, de luns a domingo, en horario UTC).
+
+- O **tema** sae dun día mundial que caia nesa semana: escóllese pola data, así que vale para calquera ano. Están en `src/themes.js`, con 74 días cubrindo todas as semanas, traducidos aos oito idiomas.
+- O **tamaño** adáptase: empeza en 5×5 e, segundo a semana anterior, sobe un chanzo (3 → 5 → 7 → 9) se se rematou antes do sábado, baixa un se quedou sen rematar, ou queda igual.
+- **Cada persoa debuxa unha soa peza por semana.**
+- Revélase en canto se enche, e queda marcado como superado. Se o luns chega sen encherse, revélase igual, co que haxa, e queda como non superado.
+- Os retos pasados quedan na portada para velos.
+
 ## Como se xoga
 
 - O taboleiro medra por aneis desde o centro (1 → 9 → 25 → 49…). Salto de anel: se no anel aberto xa non queda ningunha casilla libre (todas ocupadas ou bloqueadas), pódese pasar ao seguinte, só un, e só nas casillas que xa tocan unha peza rematada.

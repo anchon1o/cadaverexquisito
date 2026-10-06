@@ -288,3 +288,17 @@ svg.tut .q{font-family:var(--display);font-size:34px;font-weight:600;fill:#8b95a
 .flags .flagbtn.on{box-shadow:0 0 0 3px var(--hint-deep)}
 .btn.small.wide{width:100%;margin-top:14px}
 .zoomctl .btn{min-width:36px}
+
+/* Reto da semana */
+.weekly{margin-top:22px;border:3px solid var(--ink);border-radius:4px;background:var(--sheet);box-shadow:5px 5px 0 var(--hint-deep);padding:14px}
+.weekly.over{box-shadow:5px 5px 0 var(--fold);opacity:.85}
+.wtop{display:flex;justify-content:space-between;font-size:13px;color:var(--mute);margin-bottom:6px}
+.weekly h2{font-size:clamp(26px,8vw,34px);line-height:1;margin-bottom:12px}
+.wfoot{display:flex;align-items:center;gap:12px}
+.wprog{font-size:15px;color:var(--mute)}
+.wfoot .btn{margin-left:auto}
+.wpast{display:flex;gap:6px;overflow-x:auto;margin-top:12px;padding-top:10px;border-top:2px solid var(--line)}
+.wpastbtn{flex:none;border:2px solid var(--line);background:none;border-radius:3px;padding:5px 9px;font-size:13px;color:var(--mute);white-space:nowrap}
+.weekrow b{font-size:22px}
+.wprog b.ok{color:#2e7a4a}.wprog b.ko{color:#b82a3a}
+.wpastbtn.ok{border-color:#2e7a4a}.wpastbtn.ko{border-color:#d6a06e}

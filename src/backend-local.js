@@ -40,6 +40,7 @@ export function create() {
     sweep(db, gameId)
     const tiles = db.tiles.filter(t => t.game_id === gameId)
     if (tiles.some(t => t.status === 'editing' && t.session === who)) return fail('busy')
+    if (game.week && tiles.some(t => t.status === 'done' && t.session === who)) return fail('weekly_once')
     const t = C.tileAt(tiles, r, c)
     if (!t) return fail('invalid')
     if (t.status !== 'open') return fail('taken')
@@ -120,6 +121,42 @@ export function create() {
       if (db.tiles.some(t => t.game_id === g.id && t.status === 'done')) return fail('not_empty')
       db.games = db.games.filter(x => x.id !== g.id); db.tiles = db.tiles.filter(t => t.game_id !== g.id)
       write(db); return { ok: true }
+    },
+    // Reto da semana en modo demo: mesmas regras, pero neste navegador.
+    async weekly() {
+      const db = read(), now = new Date()
+      const ws = new Date(now); ws.setHours(0, 0, 0, 0); ws.setDate(ws.getDate() - ((ws.getDay() + 6) % 7))
+      const wk = ws.toISOString().slice(0, 10)
+      let g = db.games.find(x => x.week === wk)
+      if (!g) {
+        const sizes = [3, 5, 7, 9]
+        const past = db.games.filter(x => x.week && x.week < wk).sort((a, b) => a.week < b.week ? 1 : -1)
+        let n = 5
+        if (past[0]) {
+          const prev = past[0], ts = db.tiles.filter(t => t.game_id === prev.id)
+          const done = ts.filter(t => t.status === 'done')
+          let i = Math.max(0, sizes.indexOf(prev.board_size))
+          if (done.length >= prev.board_size ** 2) {
+            const last = Math.max(...done.map(t => Date.parse(t.finished_at || 0)))
+            if (last < Date.parse(prev.week) + 5 * 864e5) i = Math.min(i + 1, sizes.length - 1)
+          } else i = Math.max(i - 1, 0)
+          n = sizes[i]
+          if (prev.status === 'playing') doReveal(db, prev)
+        }
+        const id = uuid()
+        let code; do { code = Array.from({ length: 6 }, () => 'ABCDEFGHJKLMNPRSTUVWXYZ'[(Math.random() * 23) | 0]).join('') } while (db.games.some(x => x.code === code))
+        g = { id, code, title: '', creator_name: null, board_size: n, goal: n * n, avoid_own: true, tile_size: 40, colors: 32, status: 'playing', revealed_at: null, creator: null, week: wk, week_start: wk }
+        db.games.push(g)
+        for (let r = 0; r < n; r++) for (let c = 0; c < n; c++)
+          db.tiles.push({ id: uuid(), game_id: id, row_no: r, col_no: c, ring_no: C.ringOf(n, r, c), status: 'open', editor_name: null, lock_expires_at: null, frame: null, art: null })
+        write(db)
+      }
+      const ts = db.tiles.filter(t => t.game_id === g.id)
+      const info = x => ({ code: x.code, week: x.week, week_start: x.week_start, size: x.board_size, status: x.status,
+        done: db.tiles.filter(t => t.game_id === x.id && t.status === 'done').length })
+      return { ...info(g), mine: ts.some(t => t.session === session && (t.status === 'done' || t.draft)),
+        played: ts.some(t => t.session === session && t.status === 'done'),
+        past: db.games.filter(x => x.week && x.week < wk).sort((a, b) => a.week < b.week ? 1 : -1).slice(0, 8).map(info) }
     },
     async stats() { const db = read(); return { games: db.games.filter(g => g.status === 'playing').length, drawing: db.tiles.filter(t => C.isLive(t)).length } },
     unsubscribe() { notify = () => {} },
