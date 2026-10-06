@@ -360,7 +360,7 @@ declare
   ws date := (date_trunc('week', now() at time zone 'UTC'))::date;
   g cadex_games%rowtype;
   prev cadex_games%rowtype;
-  c text;
+  new_code text;
   sizes constant int[] := array[3,5,7,9];
   n int := 5;
   pos int;
@@ -392,14 +392,14 @@ begin
       if prev.status = 'playing' then perform cadex_do_reveal(prev.id); end if;
     end if;
 
-    loop c := cadex_make_code(); exit when not exists (select 1 from cadex_games where code = c); end loop;
+    loop new_code := cadex_make_code(); exit when not exists (select 1 from cadex_games where code = new_code); end loop;
     insert into cadex_games (code, title, creator_name, board_size, goal, avoid_own, tile_size, colors, week, week_start)
-    values (c, '', null, n, n * n, true, 40, 32, wk, ws)
+    values (new_code, '', null, n, n * n, true, 40, 32, wk, ws)
     returning * into g;
 
     insert into cadex_tiles (game_id, row_no, col_no, ring_no)
-    select g.id, r, c, greatest(abs(r - (n - 1) / 2), abs(c - (n - 1) / 2))
-    from generate_series(0, n - 1) r, generate_series(0, n - 1) c;
+    select g.id, rr, cc, greatest(abs(rr - (n - 1) / 2), abs(cc - (n - 1) / 2))
+    from generate_series(0, n - 1) rr, generate_series(0, n - 1) cc;
     insert into cadex_private_tiles (tile_id, game_id) select id, g.id from cadex_tiles where game_id = g.id;
   end if;
 
